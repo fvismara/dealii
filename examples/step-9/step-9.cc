@@ -567,6 +567,8 @@ namespace Step9
     , face_advection_directions(scratch_data.face_advection_directions.size())
   {}
 
+ // Comment
+
 
 
   // Now, this is the function that does the actual work. It is not very
