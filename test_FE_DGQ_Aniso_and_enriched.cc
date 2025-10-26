@@ -18,7 +18,7 @@
 
 #include <deal.II/numerics/data_out.h>
 
-#include "fe_anisotropic.h"
+#include "fe_dgq_aniso.h"
 #include "Laplace_SIPG_DG.h"
 
 #include <iostream>
@@ -119,7 +119,8 @@ int main() {
     std::cout << pnt << std::endl;
     /*for(unsigned i = 0; i < fe_enriched.dofs_per_cell; ++i) {
       std::cout << fe_enriched.shape_value(i, pnt) << std::endl;
-    }*/ /*--- NOTE: Enirched finite elements require evaluation of the enrichment function at the point in real-space, not valid on reference element ---*/
+    }*/ /*--- NOTE: Enirched finite elements require evaluation of the enrichment function
+                    at the point in real-space, not valid on reference element ---*/
   }
 
   std::cout << std::endl;
@@ -160,181 +161,11 @@ int main() {
     std::cout << "phi[" << i << "] = " << scalar_poly_tensor_product.compute_value(i, pnt) << std::endl;
   }
 
-  /*--- Try to analyze dofs per object (dpo) ---*/
-  std::cout << std::endl;
-  std::cout << "Testing dofs per object" << std::endl;
-
-  internal::GenericDoFsPerObject dpo;
-  dpo.dofs_per_object_exclusive.resize(4);
-  dpo.dofs_per_object_inclusive.resize(4);
-  dpo.object_index.resize(4);
-  dpo.first_object_index_on_face.resize(3);
-
-  // Vertices (4 in 2D)
-  dpo.dofs_per_object_exclusive[0] = {1, 1, 1, 1};
-  dpo.dofs_per_object_inclusive[0] = {1, 1, 1, 1};
-
-  // Edges
-  // edge 0 = bottom, edge 2 = top --> horizontal -> degree_x
-  // edge 1 = right, edge 3 = left --> vertical -> degree_z
-  unsigned e_h = (p >= 2 ? p - 1 : 0);
-  unsigned e_v = (r >= 2 ? r - 1 : 0);
-  dpo.dofs_per_object_exclusive[1] = {e_h, e_v, e_h, e_v};
-  dpo.dofs_per_object_inclusive[1] = {p + 1, r + 1, p + 1, r + 1};
-
-  // Inner faces
-  dpo.dofs_per_object_exclusive[2] = {(p >= 2 && r >= 2) ?
-                                      (p - 1)*(r - 1) : 0};
-  dpo.dofs_per_object_inclusive[2] = {(p + 1)*(r + 1)};
-
-  // Volume (included for coherence)
-  dpo.dofs_per_object_exclusive[3] = {0};
-  dpo.dofs_per_object_inclusive[3] = {0};
-
-  // Focus now on object_index. This should be the global index of my geoemtric entity,
-  // i.e., first vertices, then edgses and so on...
-  // However not fully coherent with what I say in fe_data.cc
-  dpo.object_index[0] = {0, 1, 2, 3};
-  dpo.object_index[1] = {4, 5, 6, 7};
-  dpo.object_index[2] = {8};
-  dpo.object_index[3] = {0};
-
-  dpo.first_object_index_on_face[0] = {0};
-  dpo.first_object_index_on_face[1] = {4};
-  dpo.first_object_index_on_face[2] = {8};
-
-  std::cout << "Size vector of vectors dofs_per_object_inclusive imposed = "
-            << dpo.dofs_per_object_inclusive.size() << std::endl;
-  std::cout << "Size vector of vectors dofs_per_object_inclusive (vertex) imposed = "
-            << dpo.dofs_per_object_inclusive[0].size() << std::endl;
-  for(const auto elem: dpo.dofs_per_object_inclusive[0]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << "\nSize vector of vectors dofs_per_object_inclusive (edge) imposed = "
-            << dpo.dofs_per_object_inclusive[1].size() << std::endl;
-  for(const auto elem: dpo.dofs_per_object_inclusive[1]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << "\nSize vector of vectors dofs_per_object_inclusive (inner face) imposed = "
-            << dpo.dofs_per_object_inclusive[2].size() << std::endl;
-  for(const auto elem: dpo.dofs_per_object_inclusive[2]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << std::endl;
-
-  /*--- Check if I can build a FiniteElementData from that ---*/
-  std::cout << std::endl;
-  std::cout << "Checking FiniteElementData constructor" << std::endl;
-
-  FiniteElementData<dim> fe_data_test(dpo,
-                                      ReferenceCells::Quadrilateral,
-                                      1,
-                                      std::max(p,r),
-                                      FiniteElementData<dim>::L2);
-  std::cout << "Dofs per vertex = " << fe_data_test.n_dofs_per_vertex() << std::endl;
-  std::cout << "Dofs per line = "   << fe_data_test.n_dofs_per_line()   << std::endl;
-  std::cout << "Dofs per cell = "   << fe_data_test.n_dofs_per_cell()   << std::endl;
-  dpo = internal::GenericDoFsPerObject::generate(fe_data_test);
-  std::cout << "Size vector of vectors dofs_per_object_inclusive from generate "
-            << "(starting from the FiniteElementData built using GenericDoFsPerObject) = "
-            << dpo.dofs_per_object_inclusive.size()
-            << std::endl;
-  std::cout << "Size vector of vectors dofs_per_object_inclusive (vertex) from generate "
-            << "(starting from the FiniteElementData built using GenericDoFsPerObject) = "
-            << dpo.dofs_per_object_inclusive[0].size()
-            << std::endl;
-  for(const auto elem: dpo.dofs_per_object_inclusive[0]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << "\nSize vector of vectors dofs_per_object_inclusive (edge) from generate "
-            << "(starting from the FiniteElementData built using GenericDoFsPerObject) = "
-            << dpo.dofs_per_object_inclusive[1].size()
-            << std::endl;
-  for(const auto elem: dpo.dofs_per_object_inclusive[1]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << "\nSize vector of vectors dofs_per_object_inclusive (inner face) from generate "
-            << "(starting from the FiniteElementData built using GenericDoFsPerObject) = "
-            << dpo.dofs_per_object_inclusive[2].size()
-            << std::endl;
-  for(const auto elem: dpo.dofs_per_object_inclusive[2]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << std::endl;
-
-  std::cout << std::endl;
-  std::cout << "Building a classic FiniteElementData based on DG" << std::endl;
-  const auto dpo_vector = FE_Anisotropic<dim>::build_dpo(std::max(p,r));
-  std::cout << "Checking vector of dofs_per_object" << std::endl;
-  for(const auto elem: dpo_vector) {
-    std::cout << elem << "  ";
-  }
-  FiniteElementData<dim> fe_data_test_dg(dpo_vector,
-                                         ReferenceCells::Quadrilateral,
-                                         1,
-                                         std::max(p,r),
-                                         FiniteElementData<dim>::L2);
-  std::cout << "\nDofs per vertex = " << fe_data_test_dg.n_dofs_per_vertex() << std::endl;
-  std::cout << "Dofs per line = "   << fe_data_test_dg.n_dofs_per_line()   << std::endl;
-  std::cout << "Dofs per cell = "   << fe_data_test_dg.n_dofs_per_cell()   << std::endl;
-  dpo = internal::GenericDoFsPerObject::generate(fe_data_test_dg);
-  std::cout << "Size vector of vectors dofs_per_object_inclusive from generate "
-            << "(starting from the FiniteElementData built as for DG) = "
-            << dpo.dofs_per_object_inclusive.size()
-            << std::endl;
-  std::cout << "Size vector of vectors dofs_per_object_inclusive (vertex) from generate "
-            << "(starting from the FiniteElementData built as for DG) = "
-            << dpo.dofs_per_object_inclusive[0].size()
-            << std::endl;
-  for(const auto elem: dpo.dofs_per_object_inclusive[0]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << "\nSize vector of vectors dofs_per_object_inclusive (edge) from generate "
-            << "(starting from the FiniteElementData built as for DG) = "
-            << dpo.dofs_per_object_inclusive[1].size()
-            << std::endl;
-  for(const auto elem: dpo.dofs_per_object_inclusive[1]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << "\nSize vector of vectors dofs_per_object_inclusive (inner face) from generate "
-            << "(starting from the FiniteElementData built as for DG) = "
-            << dpo.dofs_per_object_inclusive[2].size()
-            << std::endl;
-  for(const auto elem: dpo.dofs_per_object_inclusive[2]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << "\nSize vector of vectors object_index from generate "
-            << "(starting from the FiniteElementData built as for DG) = "
-            << dpo.object_index.size()
-            << std::endl;
-  std::cout << "Size vector of vectors object_index (vertex) from generate "
-            << "(starting from the FiniteElementData built as for DG) = "
-            << dpo.object_index[0].size()
-            << std::endl;
-  for(const auto elem: dpo.object_index[0]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << "\nSize vector of vectors object_index (edge) from generate "
-            << "(starting from the FiniteElementData built as for DG) = "
-            << dpo.object_index[1].size()
-            << std::endl;
-  for(const auto elem: dpo.object_index[1]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << "\nSize vector of vectors object_index (inner face) from generate "
-            << "(starting from the FiniteElementData built as for DG) = "
-            << dpo.object_index[2].size()
-            << std::endl;
-  for(const auto elem: dpo.object_index[2]) {
-    std::cout << elem << "  ";
-  }
-  std::cout << std::endl;
-
   /*--- Try with anisotropic finite element space ---*/
   std::cout << std::endl;
   std::cout << "Focus now on anisotropic discontinuous finite elements" << std::endl;
 
-  FE_Anisotropic<dim> fe_aniso(p, r, scalar_poly_tensor_product);
+  FE_DGQ_Aniso<dim> fe_aniso(p, r, scalar_poly_tensor_product);
 
   std::cout << "DoFs per cell stored: " << fe_aniso.dofs_per_cell << std::endl;
 
