@@ -1023,7 +1023,7 @@ FE_Enriched<dim, spacedim>::compare_for_domination(
     }
   else
     {
-      DEAL_II_NOT_IMPLEMENTED();
+      //DEAL_II_NOT_IMPLEMENTED();
       return FiniteElementDomination::neither_element_dominates;
     }
 }

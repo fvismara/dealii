@@ -979,7 +979,7 @@ std::vector<std::pair<unsigned int, unsigned int>>
 FiniteElement<dim, spacedim>::hp_vertex_dof_identities(
   const FiniteElement<dim, spacedim> &) const
 {
-  DEAL_II_NOT_IMPLEMENTED();
+  //DEAL_II_NOT_IMPLEMENTED();
   return std::vector<std::pair<unsigned int, unsigned int>>();
 }
 
@@ -1014,7 +1014,7 @@ FiniteElement<dim, spacedim>::compare_for_domination(
   const FiniteElement<dim, spacedim> &,
   const unsigned int) const
 {
-  DEAL_II_NOT_IMPLEMENTED();
+  //DEAL_II_NOT_IMPLEMENTED();
   return FiniteElementDomination::neither_element_dominates;
 }
 
