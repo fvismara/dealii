@@ -30,6 +30,7 @@
 
 #include <deal.II/fe/fe.h>
 #include <deal.II/fe/mapping.h>
+#include <deal.II/fe/fe_nothing.h>
 
 #include <deal.II/hp/mapping_collection.h>
 #include <deal.II/hp/q_collection.h>
@@ -625,6 +626,22 @@ public:
          const std::vector<const AffineConstraints<number2> *> &constraint,
          const QuadratureType                                  &quad,
          const AdditionalData &additional_data = AdditionalData());
+
+  template <typename FEType, typename QuadratureType, typename number2, typename MappingType>
+  void reinit_new(const MappingType                                     &mapping_in,
+                const std::vector<const DoFHandler<dim> *>            &dof_handlers_in,
+                const std::vector<const AffineConstraints<number2> *> &constraints_in,
+                const std::vector<FEType>                              &finite_elements,
+                const std::vector<QuadratureType>                      &quadratures,
+                const AdditionalData                                   &additional_data = AdditionalData());
+
+  template <typename FEType, typename QuadratureType, typename number2, typename MappingType>
+  void reinit_new(const MappingType                &mapping_in,
+                  const DoFHandler<dim>            &dof_handler_in,
+                  const AffineConstraints<number2> &constraint_in,
+                  const std::vector<FEType>        &finite_elements,
+                  const std::vector<QuadratureType>&quadratures,
+                  const AdditionalData             &additional_data = AdditionalData());
 
   /**
    * Copy function. Creates a deep copy of all data structures. It is usually
@@ -3212,6 +3229,384 @@ namespace internal
   } // namespace MatrixFreeImplementation
 } // namespace internal
 
+
+template<int dim, typename Number, typename VectorizedArrayType>
+template <typename FEType, typename QuadratureType, typename number2, typename MappingType>
+void MatrixFree<dim, Number, VectorizedArrayType>::reinit_new(
+    const MappingType                                     &mapping_in,
+    const std::vector<const DoFHandler<dim> *>            &dof_handlers_in,
+    const std::vector<const AffineConstraints<number2> *> &constraints_in,
+    const std::vector<FEType>                              &finite_elements,
+    const std::vector<QuadratureType>                      &quadratures,
+    const AdditionalData                                   &additional_data)
+{
+  
+  // Call standard reinit with first quadrature to set up dof_info and mapping_info
+  std::vector<const DoFHandler<dim> *> dof_handlers_vec(dof_handlers_in);
+  std::vector<const AffineConstraints<number2> *> constraints_vec(constraints_in);
+  
+  reinit(mapping_in, dof_handlers_vec, constraints_vec, quadratures[0], additional_data);
+
+  // This commented section below is an attempt to reimplement mapping_info. this is not working at the moment
+  /*
+  std::cout << face_info.faces.size() << std::endl;
+
+  std::shared_ptr<FE_Nothing<dim>> dummy_fe = std::make_shared<FE_Nothing<dim>>(mapping_info.reference_cell_types[0][0]);
+  unsigned int work_per_chunk = std::max(std::size_t(8), (face_info.faces.size() + MultithreadInfo::n_threads() - 1) / MultithreadInfo::n_threads());
+  std::pair<unsigned int, unsigned int> face_range(0U, work_per_chunk);
+  while (face_range.first < face_info.faces.size())
+  {
+    const unsigned int end_face = std::min(std::size_t(face_range.second), face_info.faces.size());
+    for (unsigned int face = face_range.first; face < end_face; ++face)
+    {
+      const bool is_boundary_face = face_info.faces[face].cells_exterior[0] == numbers::invalid_unsigned_int;
+      const bool is_vertical_face = face_info.faces[face].interior_face_no <= 1;
+      
+      //if (is_boundary_face)
+      //std::cout << "Boundary face, ";
+      //else 
+      //std::cout << "Interior face, ";
+
+      //if (face_info.faces[face].interior_face_no <= 1)
+        //std::cout << "vertical" << std::endl;
+      //else
+        //std::cout << "horizontal" << std::endl;
+        
+
+      //(dof_handlers_in[0].get_triangulation().begin_face())
+      
+      //if (is_boundary_face)
+      //  FEFaceValues<dim> &fe_face_values = is_boundary_face ? std::make_shared<FEFaceValues<dim>>(
+      //                mapping_in,
+      //                *dummy_fe,
+      //                quadratures,
+      //                mapping_info.update_flags_boundary_faces)
+      //else
+      //std::cout << "interior            " << static_cast<unsigned>(face_info.faces[face].face_orientation)  << std::endl;
+      
+     
+      std::shared_ptr<FEFaceValues<dim,dim>> fe_face_values = nullptr;
+      std::shared_ptr<FESubfaceValues<dim,dim>> fe_subface_values = nullptr;
+      if (is_boundary_face)
+        fe_face_values = std::make_shared<FEFaceValues<dim,dim>>(
+                      mapping_in,
+                      *dummy_fe,
+                      is_vertical_face ? quadratures[1] : quadratures[0],
+                      mapping_info.update_flags_boundary_faces);
+      else
+        fe_face_values = std::make_shared<FEFaceValues<dim,dim>>(
+                      mapping_in,
+                      *dummy_fe,
+                      is_vertical_face ? quadratures[1] : quadratures[0],
+                      mapping_info.update_flags_inner_faces);
+
+      unsigned int n_q_points = 0; // will be override once FEFaceValues
+                                           // is set up
+
+      bool normal_is_similar = true;
+      bool JxW_is_similar    = true;
+      bool cell_is_cartesian = true;
+      for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+      {
+        Tensor<2, dim> jacobian_0;
+        double         compare_norm_jac = 1.;
+        if (face_info.faces[face].cells_interior[v] != numbers::invalid_unsigned_int)
+        {
+          typename dealii::Triangulation<dim>::cell_iterator
+            cell_it(&dof_handlers_in[0]->get_triangulation(), 
+                           cell_level_index[face_info.faces[face].cells_interior[v]].first, 
+                           cell_level_index[face_info.faces[face].cells_interior[v]].second);
+
+          fe_face_values->reinit(cell_it, face_info.faces[face].interior_face_no);
+
+          if (v == 0)
+          {
+            n_q_points = fe_face_values->n_quadrature_points;
+            mapping_info.face_data.resize(n_q_points);
+          }
+
+          for (unsigned int q = 0; q < n_q_points; ++q)
+          {
+            if (std::abs(fe_face_values->JxW(q) * fe_face_values->get_quadrature().weight(0) -
+                         fe_face_values->JxW(0) * fe_face_values->get_quadrature().weight(q)) >
+                         2048. * std::numeric_limits<double>::epsilon() *
+                          fe_face_values->JxW(0) * fe_face_values->get_quadrature().weight(q))
+              JxW_is_similar = false;
+            mapping_info.face_data[face].JxW_values[q][v] = fe_face_values->JxW(q);
+
+            DerivativeForm<1, dim, dim> inv_jac = fe_face_values->jacobian(q).covariant_form();
+            Tensor<1, dim> normal = fe_face_values->normal_vector(q);
+
+            // Filter out very small values in normal. No need
+            // to re-normalize because these values cannot enter
+            // the norm significantly: Total size is 1 but 1e-13
+            // squared is 1e-26.
+            for (unsigned int d = 0; d < dim; ++d)
+              if (std::abs(normal[d]) < 1024. * std::numeric_limits<double>::epsilon())
+                normal[d] = 0.;
+
+            if (q == 0)
+            {
+              jacobian_0       = inv_jac;
+              compare_norm_jac = jacobian_0.norm();
+            }
+            for (unsigned int d = 0; d < dim; ++d)
+              for (unsigned int e = 0; e < dim; ++e)
+              {
+                if (std::abs(inv_jac[d][e] - jacobian_0[d][e]) > 2048. *
+                    std::numeric_limits<double>::epsilon() * compare_norm_jac)
+                      JxW_is_similar = false;
+                //const unsigned int ee = reorder_face_derivative_indices<dim>(
+                  //                  face_info.faces[face].interior_face_no,
+                    //                e,
+                      //              cell_it->reference_cell());
+                unsigned int table[2][2] = {{1,0}, {0,1}};
+                const unsigned int ee = table[face_info.faces[face].interior_face_no / 2][e];
+                //mapping_info.face_data.general_jac[q][d][e][v] = inv_jac[d][ee];
+              }
+
+            for (unsigned int d = 0; d < dim; ++d)
+            {
+              mapping_info.face_data[face].normal_vectors[q][d][v] = normal[d];
+              if (std::abs(normal[d] - fe_face_values->normal_vector(0)[d]) >
+                          1024. * std::numeric_limits<double>::epsilon())
+              normal_is_similar = false;
+            }
+            if (std::abs(std::abs(normal[face_info.faces[face].interior_face_no / 2]) - 1.) >
+                      1024. * std::numeric_limits<double>::epsilon())
+              cell_is_cartesian = false;
+            for (unsigned int d = 0; d < dim; ++d)
+              for (unsigned int e = 0; e < dim; ++e)
+                if (e != d && std::abs(inv_jac[d][e]) >
+                      2048 * std::numeric_limits<double>::epsilon() * compare_norm_jac)
+                  cell_is_cartesian = false;
+
+            if (fe_face_values->get_update_flags() & update_quadrature_points)
+              for (unsigned int d = 0; d < dim; ++d)
+                mapping_info.face_data[face].quadrature_points[q][d][v] = fe_face_values->quadrature_point(q)[d];
+          }
+        }
+    // Fill up with data of the zeroth component to avoid
+    // false negatives when checking for similarities
+    else
+      {
+        for (unsigned int q = 0; q < n_q_points; ++q)
+        {
+          mapping_info.face_data[face].JxW_values[q][v] = mapping_info.face_data[face].JxW_values[q][0];
+          for (unsigned int d = 0; d < dim; ++d)
+            for (unsigned int e = 0; e < dim; ++e)
+            {
+              mapping_info.face_data.general_jac[q][d][e][v] = mapping_info.face_data.general_jac[q][d][e][0];
+              mapping_info.face_data[face].normal_vectors[q][d][v] = mapping_info.face_data[face].normal_vectors[q][d][0];
+            }
+          if (fe_face_values->get_update_flags() & update_quadrature_points)
+            for (unsigned int d = 0; d < dim; ++d)
+              mapping_info.face_data.quadrature_points[q][d][v] = mapping_info.face_data.quadrature_points[q][d][0];
+        }
+      }
+    if (is_boundary_face == false && face_info.faces[face].cells_exterior[v] != numbers::invalid_unsigned_int)
+    {
+      typename dealii::Triangulation<dim>::cell_iterator cell_it(&dof_handlers_in[0]->get_triangulation(),
+                                cell_level_index[face_info.faces[face].cells_exterior[v]].first,
+                                cell_level_index[face_info.faces[face].cells_exterior[v]].second);
+
+      const FEValuesBase<dim,dim> *actual_fe_face_values = nullptr;
+      if (face_info.faces[face].subface_index >= GeometryInfo<dim>::max_children_per_cell)
+      {
+         actual_fe_face_values = fe_face_values.get();
+      }
+      else
+      {
+          fe_subface_values =
+            std::make_shared<FESubfaceValues<dim,dim>>(
+              mapping_in,
+              *dummy_fe,
+              is_vertical_face ? quadratures[1] : quadratures[0],
+              mapping_info.update_flags_inner_faces);
+          fe_subface_values->reinit(cell_it,
+            face_info.faces[face].exterior_face_no, face_info.faces[face].subface_index);
+          actual_fe_face_values = fe_subface_values.get();
+      }
+      for (unsigned int q = 0; q < n_q_points; ++q)
+      {
+        DerivativeForm<1, dim, dim> inv_jac = actual_fe_face_values->jacobian(q).covariant_form();
+        if (q == 0)
+        {
+          jacobian_0       = inv_jac;
+          compare_norm_jac = jacobian_0.norm();
+        }
+        for (unsigned int d = 0; d < dim; ++d)
+          for (unsigned int e = 0; e < dim; ++e)
+          {
+            if (std::abs(inv_jac[d][e] - jacobian_0[d][e]) >
+                  2048. * std::numeric_limits<double>::epsilon() * compare_norm_jac)
+              JxW_is_similar = false;
+            //const unsigned int ee = reorder_face_derivative_indices<dim>(
+              //                      face_info.faces[face].exterior_face_no,
+                //                    e,
+                  //                  cell_it->reference_cell());
+            unsigned int table[2][2] = {{1,0}, {0,1}};
+            const unsigned int ee = table[face_info.faces[face].interior_face_no / 2][e];
+            //mapping_info.face_data.general_jac[n_q_points + q][d][e][v] = inv_jac[d][ee];
+          }
+        for (unsigned int d = 0; d < dim; ++d)
+          for (unsigned int e = 0; e < dim; ++e)
+            if (e != d && std::abs(inv_jac[d][e]) >
+                  2048 * std::numeric_limits<double>::epsilon() * compare_norm_jac)
+              cell_is_cartesian = false;
+      }
+    }
+    // Fill up with 'known' values
+    else if (is_boundary_face == false)
+    {
+      Assert(face_info.faces[face].cells_exterior[0] != numbers::invalid_unsigned_int, ExcInternalError());
+      for (unsigned int q = 0; q < n_q_points; ++q)
+        for (unsigned int d = 0; d < dim; ++d)
+          for (unsigned int e = 0; e < dim; ++e)
+            mapping_info.face_data.general_jac[n_q_points + q][d][e][v] =
+              mapping_info.face_data.general_jac[n_q_points + q][d][e][0];
+    }
+    // If boundary face, simply set the data to zero (will not
+    // be used). Note that faces over periodic boundary
+    // conditions will be treated as interior ones in this setup.
+    else
+      for (unsigned int q = 0; q < n_q_points; ++q)
+        for (unsigned int d = 0; d < dim; ++d)
+          for (unsigned int e = 0; e < dim; ++e)
+            mapping_info.face_data.general_jac[n_q_points + q][d][e][v] = 0.;
+    }
+    face_range.first = face_range.second;
+    face_range.second += work_per_chunk;
+  }
+}
+  */
+  // mapping_info ends here
+
+  /*
+  std::cout << "quad size cell " << mapping_info.cell_data[0].JxW_values.size() << std::endl;
+  std::cout << "offsets size cell " << mapping_info.cell_data[0].data_index_offsets.size() << std::endl;
+  for (unsigned int i = 0; i < mapping_info.cell_data[0].JxW_values.size(); i++)
+    std::cout << "  " << mapping_info.cell_data[0].JxW_values[i] << std::endl;
+  std::cout << "quad size face " << mapping_info.face_data[0].JxW_values.size() << std::endl;
+  std::cout << "offsets size face " << mapping_info.face_data[0].data_index_offsets.size() << std::endl;
+  for (unsigned int i = 0; i < mapping_info.face_data[0].JxW_values.size(); i++)
+    std::cout << "  " << mapping_info.face_data[0].JxW_values[i] << std::endl;
+  */
+
+
+  // FEEvaluationBase::JxW returns weights_z\kron weights_x instead of weights_x\kron weights_z.
+  // Therefore define the tensor quadrature as quadrature_z\kron quadrature_x
+  Quadrature<2> tens_quad(quadratures[1], quadratures[0]);
+  mapping_info.cell_data[0].descriptor[0].quadrature = tens_quad;
+  mapping_info.cell_data[0].descriptor[0].n_q_points = tens_quad.size();
+  mapping_info.cell_data[0].descriptor[0].quadrature_weights.resize(tens_quad.size());
+  mapping_info.cell_data[0].quadrature_points.resize(tens_quad.size());
+  for (unsigned int i = 0; i < tens_quad.size(); ++i)
+  {
+    mapping_info.cell_data[0].descriptor[0].quadrature_weights[i] = tens_quad.weight(i);
+    mapping_info.cell_data[0].quadrature_points[i] = tens_quad.point(i);
+  }
+
+  mapping_info.face_data[0].descriptor.resize(dim);
+  for (unsigned int d = 0; d < dim; d++)
+  {
+    mapping_info.face_data[0].descriptor[d].initialize(quadratures[d]);
+    //mapping_info.face_data[0].descriptor[d].quadrature = quadratures[d];
+    //mapping_info.face_data[0].descriptor[d].n_q_points = quadratures[d].size();
+    //mapping_info.face_data[0].descriptor[d].quadrature_weights.resize(quadratures[d].size());
+    //for (unsigned int i = 0; i < quadratures[d].size(); ++i)
+      //mapping_info.face_data[0].descriptor[d].quadrature_weights[i] = quadratures[d].weight(i);
+  }
+        
+
+  // Now manually construct shape_info with tensor-product structure
+  // Initialize shape_info for all components
+  unsigned int n_components = dof_handlers_in.size();
+  shape_info.reinit(TableIndices<4>(n_components, 1, 1, 1));
+  
+  // For each component, build shape_info
+  for (unsigned int comp = 0; comp < n_components; ++comp) {
+    shape_info(comp, 0, 0, 0).data.resize(dim);
+    
+    // Total quadrature points
+    unsigned int n_q_points_total = 1;
+    for (unsigned int direction = 0; direction < dim; direction++)
+      n_q_points_total *= quadratures[direction].size();
+    shape_info(comp,0,0,0).n_q_points = n_q_points_total;
+
+    // Total dofs per component
+    unsigned int dofs_total = 1;
+    for (unsigned int direction = 0; direction < dim; direction++)
+      dofs_total *= (finite_elements[direction].degree + 1);
+    shape_info(comp,0,0,0).dofs_per_component_on_cell = dofs_total;
+
+    shape_info(comp,0,0,0).n_dimensions = dim;
+    shape_info(comp,0,0,0).n_components = 1;
+    unsigned int n_quad_1d, n_dofs_1d;
+    
+    // Build 1D shape data for each direction
+    for (unsigned int direction = 0; direction < dim; direction++) {
+      n_quad_1d = quadratures[direction].size();
+      n_dofs_1d = finite_elements[direction].degree + 1;
+      shape_info(comp,0,0,0).data[direction].element_type = internal::MatrixFreeFunctions::tensor_general;
+      shape_info(comp,0,0,0).data[direction].quadrature = quadratures[direction];
+      shape_info(comp,0,0,0).data[direction].n_q_points_1d = n_quad_1d;
+      shape_info(comp,0,0,0).data[direction].fe_degree = finite_elements[direction].degree;
+
+      shape_info(comp,0,0,0).data[direction].shape_values.resize(n_dofs_1d*n_quad_1d);
+      shape_info(comp,0,0,0).data[direction].shape_gradients.resize(n_dofs_1d*n_quad_1d);
+      shape_info(comp,0,0,0).data[direction].shape_hessians.resize(n_dofs_1d*n_quad_1d);
+
+      shape_info(comp,0,0,0).data[direction].shape_data_on_face[0].resize(3*n_dofs_1d);
+      shape_info(comp,0,0,0).data[direction].shape_data_on_face[1].resize(3*n_dofs_1d);
+
+      for (unsigned int i = 0; i < n_dofs_1d; i++)
+      {
+        for (unsigned int q = 0; q < n_quad_1d; q++)
+        {
+          shape_info(comp,0,0,0).data[direction].shape_values[q * n_dofs_1d + i] = 
+            finite_elements[direction].shape_value(i, quadratures[direction].point(q));
+          shape_info(comp,0,0,0).data[direction].shape_gradients[q * n_dofs_1d + i] =
+            finite_elements[direction].shape_grad(i, quadratures[direction].point(q))[0];
+          shape_info(comp,0,0,0).data[direction].shape_hessians[q * n_dofs_1d + i] =
+            finite_elements[direction].shape_grad_grad(i, quadratures[direction].point(q))[0][0];
+        }
+        shape_info(comp,0,0,0).data[direction].shape_data_on_face[0][i] =
+          finite_elements[direction].shape_value(i, Point<1>(0.));
+        shape_info(comp,0,0,0).data[direction].shape_data_on_face[0][i + n_dofs_1d] =
+          finite_elements[direction].shape_grad(i, Point<1>(0.))[0];
+        shape_info(comp,0,0,0).data[direction].shape_data_on_face[0][i + 2*n_dofs_1d] =
+          finite_elements[direction].shape_grad_grad(i, Point<1>(0.))[0][0];
+        shape_info(comp,0,0,0).data[direction].shape_data_on_face[1][i] =
+          finite_elements[direction].shape_value(i, Point<1>(1.));
+        shape_info(comp,0,0,0).data[direction].shape_data_on_face[1][i + n_dofs_1d] =
+          finite_elements[direction].shape_grad(i, Point<1>(1.))[0];
+        shape_info(comp,0,0,0).data[direction].shape_data_on_face[1][i + 2*n_dofs_1d] =
+          finite_elements[direction].shape_grad_grad(i, Point<1>(1.))[0][0];
+
+      }
+
+    }
+  }
+}
+
+
+template<int dim, typename Number, typename VectorizedArrayType>
+template <typename FEType, typename QuadratureType, typename number2, typename MappingType>
+void MatrixFree<dim, Number, VectorizedArrayType>::reinit_new(
+            const MappingType                  &mapping_in,
+            const DoFHandler<dim>              &dof_handler_in,
+            const AffineConstraints<number2>   &constraint_in,
+            const std::vector<FEType>          &finite_elements,
+            const std::vector<QuadratureType>  &quadratures,
+            const AdditionalData               &additional_data)
+{
+  std::vector<const DoFHandler<dim> *>            dof_handlers(1, &dof_handler_in);
+  std::vector<const AffineConstraints<number2> *> constraints(1, &constraint_in);
+  
+  reinit_new(mapping_in, dof_handlers, constraints, 
+             finite_elements, quadratures, additional_data);
+}
 
 
 template <int dim, typename Number, typename VectorizedArrayType>

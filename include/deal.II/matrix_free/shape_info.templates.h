@@ -114,7 +114,10 @@ namespace internal
                 dynamic_cast<const TensorProductPolynomials<
                     dim,
                     Polynomials::PiecewisePolynomial<double>> *>(
-                  &fe_poly->get_poly_space()) != nullptr))
+                  &fe_poly->get_poly_space()) != nullptr ||
+                dynamic_cast<const AnisotropicPolynomials<dim> *>(
+                  &fe_poly->get_poly_space()) != nullptr)
+                )
         scalar_lexicographic = fe_poly->get_poly_space_numbering_inverse();
       else if (const auto fe_dgp =
                  dynamic_cast<const FE_DGP<dim, spacedim> *>(&fe))
