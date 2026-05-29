@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------------
  *
  * SPDX-License-Identifier: LGPL-2.1-or-later
- * Copyright (C) 1999 - 2024 by the deal.II authors
+ * Copyright (C) 1999 - 2026 by the deal.II authors
  *
  * This file is part of the deal.II library.
  *
@@ -11,9 +11,10 @@
  * LICENSE.md and CONTRIBUTING.md at the top level directory of deal.II.
  *
  * ------------------------------------------------------------------------
+ *
+ * Authors: Giuseppe Orlando, 2026
+            Federico Vismara, 2026
  */
-/*--- Author: Giuseppe Orlando, 2025 ---*/
-
 #pragma once
 
 #include <deal.II/fe/fe_poly.h>
@@ -21,24 +22,43 @@
 
 using namespace dealii;
 
-// Derived class from FE_Poly to represent anisotropic DG finite elements
-//
+/**
+ * Derived class from FE_Poly to represent anisotropic DG finite elements
+ * @tparam dim Number of dimensions
+ */
 template<int dim>
 class FE_DGQ_Aniso: public FE_Poly<dim> {
 public:
   static_assert(dim <= 3, "FE_DGQ_Aniso is available only for dim = 1, 2 or 3");
 
+  /**
+   * Class constructor.
+   * @param degree_x Polynomial degree along the horizontal direction
+   * @param degree_z Polynomial degree along the vertical direction
+   * @param polynomials Polynomial basis
+   */
   FE_DGQ_Aniso(const unsigned degree_x,
                const unsigned degree_z,
-               const AnisotropicPolynomials<dim>& polynomials); /*--- Class constructor ---*/
+               const AnisotropicPolynomials<dim>& polynomials);
 
-  std::string get_name() const override; /*--- Get name of this finite element space ---*/
+  /**
+   * Get name of this finite element space.
+   */
+  std::string get_name() const override;
 
-  std::unique_ptr<FiniteElement<dim>> clone() const override; /*--- Clone function ---*/
+  /**
+   * Clone function.
+   */
+  std::unique_ptr<FiniteElement<dim>> clone() const override;
 
 private:
+  /**
+   * Build dof per object.
+   * @param degree_x Polynomial degree along the horizontal direction
+   * @param degree_z Polynomial degree along the vertical direction
+   */
   std::vector<unsigned> build_dpo(const unsigned degree_x,
-                                  const unsigned degree_z); /*--- Build dof per object ---*/
+                                  const unsigned degree_z);
 };
 
 // Class constructor
@@ -57,15 +77,15 @@ FE_DGQ_Aniso<dim>::FE_DGQ_Aniso(const unsigned degree_x,
                 std::vector<ComponentMask>(this->build_dpo(degree_x, degree_z).back(),
                                            ComponentMask(std::vector<bool>(1, true))))
   {
-    /*--- Numeber of nodes along each coordinate direction ---*/
+    // Numeber of nodes along each coordinate direction
     const unsigned nx = degree_x + 1;
     const unsigned nz = degree_z + 1;
 
-    /*--- Each shape function will have a corresponding support point ---*/
+    // Each shape function will have a corresponding support point
     this->unit_support_points.clear();
     this->unit_support_points.reserve(nx*nz);
 
-    /*--- Cartesian product [0,1]^2 coherent with LagrangeEquidistant ---*/
+    // Cartesian product [0,1]^2 coherent with LagrangeEquidistant
     for(unsigned j = 0; j < nz; ++j) {
       const double z = (nz == 1 ? 0.5 : static_cast<double>(j)/degree_z);
       for(unsigned i = 0; i < nx; ++i) {
@@ -78,9 +98,8 @@ FE_DGQ_Aniso<dim>::FE_DGQ_Aniso(const unsigned degree_x,
 // Auxiliary function necessary to initalize the dofs per object
 //
 template<int dim>
-std::vector<unsigned>
-FE_DGQ_Aniso<dim>::build_dpo(const unsigned degree_x,
-                             const unsigned degree_z) {
+std::vector<unsigned> FE_DGQ_Aniso<dim>::build_dpo(const unsigned degree_x,
+                                                   const unsigned degree_z) {
   std::vector<unsigned> dpo(dim + 1, 0);
 
   if(dim == 1) {
@@ -92,7 +111,7 @@ FE_DGQ_Aniso<dim>::build_dpo(const unsigned degree_x,
   else if(dim == 3) {
     dpo[dim] = (degree_x + 1)*(degree_x + 1)*(degree_z + 1);
   }
-  
+
   return dpo;
 }
 

@@ -1,17 +1,19 @@
-// ------------------------------------------------------------------------
-//
-// SPDX-License-Identifier: LGPL-2.1-or-later
-// Copyright (C) 2017 - 2025 by the deal.II authors
-//
-// This file is part of the deal.II library.
-//
-// Part of the source code is dual licensed under Apache-2.0 WITH
-// LLVM-exception OR LGPL-2.1-or-later. Detailed license information
-// governing the source code and code contributions can be found in
-// LICENSE.md and CONTRIBUTING.md at the top level directory of deal.II.
-//
-// ------------------------------------------------------------------------
-
+/* ------------------------------------------------------------------------
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 1999 - 2026 by the deal.II authors
+ *
+ * This file is part of the deal.II library.
+ *
+ * Part of the source code is dual licensed under Apache-2.0 WITH
+ * LLVM-exception OR LGPL-2.1-or-later. Detailed license information
+ * governing the source code and code contributions can be found in
+ * LICENSE.md and CONTRIBUTING.md at the top level directory of deal.II.
+ *
+ * ------------------------------------------------------------------------
+ *
+ * Author: Federico Vismara, 2026
+ */
 #ifndef dealii_tensor_product_matrix_aniso_h
 #define dealii_tensor_product_matrix_aniso_h
 
@@ -37,6 +39,8 @@ class Vector;
 template <typename>
 class FullMatrix;
 #endif
+
+//GO: I have not commented this class, because I did not get some routines, I would like to discuss first.
 
 template <int dim, typename Number, int n_rows_1d_x = -1, int n_rows_1d_z = -1>
 class TensorProductMatrixSymmetricSumAniso
@@ -99,7 +103,7 @@ namespace internal
   {
 
     template <typename Number, int n_rows_1d_x, int n_rows_1d_z>
-    void 
+    void
     kron_prod_times_vec(const Number *A, const Number *B, const Number *in, Number *out, bool transposed)
     {
       // Computes (A\kron B)*in, where A is a matrix of size n_rows_1d_x and B is a matrix of size n_rows_1d_z
@@ -248,7 +252,7 @@ namespace internal
     {
       //const unsigned int     n_rows_1d = mass_matrix[0].n_cols();
       constexpr unsigned int macro_size = VectorizedArray<Number, n_lanes>::size();
-      
+
       for (unsigned int dir = 0; dir < dim; ++dir)
         {
           const unsigned int n_rows = mass_matrix[dir].n_rows();
@@ -280,7 +284,7 @@ namespace internal
           Number       *eigenval_begin = eigenvalues_flat.data();
           for (unsigned int lane = 0; lane < macro_size; ++lane)
             internal::TensorProductMatrixSymmetricSum::spectral_assembly<
-              Number>(mass_cbegin + nm * lane, deriv_cbegin + nm * lane, n_rows, n_cols, eigenval_begin + n_rows * lane, 
+              Number>(mass_cbegin + nm * lane, deriv_cbegin + nm * lane, n_rows, n_cols, eigenval_begin + n_rows * lane,
                 eigenvec_begin + nm * lane);
 
           eigenvalues[dir].resize(n_rows);
@@ -357,7 +361,7 @@ namespace internal
         eval.template apply<1, false, false>(A1, t, dst);
         eval.template apply<0, false, false>(A0, src, t);
         eval.template apply<1, false, true>(M1, t, dst);
-        
+
     }*/
 
     /*
@@ -466,7 +470,7 @@ TensorProductMatrixSymmetricSumAniso<dim, Number, n_rows_1d_x, n_rows_1d_z>::app
           internal::TensorProductMatrixSymmetricSumAniso::kron_prod_times_vec<Number, n_rows_1d_x, n_rows_1d_z> (S1, S0, src, dst, true);
           //eval_x.template apply<0, true, false>(S0, src, dst);
           //eval_z.template apply<1, true, false>(S1, dst, dst);
-        
+
           for (unsigned int i1 = 0, c = 0; i1 < n_rows_1d_z; ++i1)
             for (unsigned int i0 = 0; i0 < n_rows_1d_x; ++i0, ++c) {
               dst[c] /= (eigenvalues[1][i1] + eigenvalues[0][i0]);

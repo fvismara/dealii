@@ -1,4 +1,4 @@
-// This file solves the Poisson equation -\Delta u = f on the 2d unit square [0,1]x[0,1] using DG 
+// This file solves the Poisson equation -\Delta u = f on the 2d unit square [0,1]x[0,1] using DG
 // and a matrix free implementation. Still doesn't work because of problems with assemble_rhs. see compiler errors
 
 #include <deal.II/grid/grid_generator.h>
@@ -37,7 +37,7 @@ public:
       val *= std::cos(numbers::PI * 2.4 * p[d]);
     return val;
   }
-  
+
   virtual Tensor<1, dim> gradient(const Point<dim> &p,
                                   const unsigned int = 0) const override final
   {
@@ -55,8 +55,8 @@ public:
     return grad;
   }
 };
-  
-  
+
+
 /*------------------------------------------------------ Right-hand side ---------------------------------------------------*/
 template <int dim>
 class RightHandSide : public Function<dim>
@@ -108,14 +108,14 @@ private:
              LinearAlgebra::distributed::Vector<number>       &dst,
              const LinearAlgebra::distributed::Vector<number> &src,
              const std::pair<unsigned int, unsigned int> &cell_range) const;
-  
+
   void
   apply_face(const MatrixFree<dim, number>                    &data,
              LinearAlgebra::distributed::Vector<number>       &dst,
              const LinearAlgebra::distributed::Vector<number> &src,
              const std::pair<unsigned int, unsigned int> &face_range) const;
-  
-  void 
+
+  void
   apply_boundary(const MatrixFree<dim, number>                    &data,
                  LinearAlgebra::distributed::Vector<number>       &dst,
                  const LinearAlgebra::distributed::Vector<number> &src,
@@ -205,9 +205,9 @@ void LaplaceOperator<dim, fe_degree_x, fe_degree_z, number>::apply_face(
   const LinearAlgebra::distributed::Vector<number> &src,
   const std::pair<unsigned int, unsigned int>      &face_range) const
 {
-  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, number> 
+  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, number>
     phi_outer(data, false);
-  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, number> 
+  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, number>
     phi_inner(data, true);
 
   for (unsigned int inner_face = face_range.first; inner_face < face_range.second; ++inner_face) {
@@ -230,9 +230,9 @@ void LaplaceOperator<dim, fe_degree_x, fe_degree_z, number>::apply_face(
                              phi_inner.inverse_jacobian(0))[dim - 1]) +
                    std::abs((phi_outer.normal_vector(0) *
                              phi_outer.inverse_jacobian(0))[dim - 1]));
-    const VectorizedArray<number> sigma = inverse_length_normal_to_face * 
+    const VectorizedArray<number> sigma = inverse_length_normal_to_face *
                                   get_penalty_factor();
-    
+
     // submit_values / submit_gradients
     for (unsigned int q = 0; q < face_q_points; q++)
     {
@@ -247,11 +247,11 @@ void LaplaceOperator<dim, fe_degree_x, fe_degree_z, number>::apply_face(
       phi_inner.submit_normal_derivative(-solution_jump * number(0.5), q);
       phi_outer.submit_normal_derivative(-solution_jump * number(0.5), q);
     }
-    
+
     // integrate
     phi_inner.integrate(EvaluationFlags::gradients);
     phi_outer.integrate(EvaluationFlags::gradients);
-    
+
     // distribute_local_to_global
     phi_inner.distribute_local_to_global(dst);
     phi_outer.distribute_local_to_global(dst);
@@ -266,7 +266,7 @@ void LaplaceOperator<dim, fe_degree_x, fe_degree_z, number>::apply_boundary(
       const LinearAlgebra::distributed::Vector<number> &src,
       const std::pair<unsigned int, unsigned int>      &face_range) const
 {
-  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, number>  
+  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, number>
     phi_inner(data, true);
   for (unsigned int face = face_range.first; face < face_range.second; ++face)
     {
@@ -275,14 +275,14 @@ void LaplaceOperator<dim, fe_degree_x, fe_degree_z, number>::apply_boundary(
 
     // read dof values
     phi_inner.read_dof_values(src);
-  
+
     const VectorizedArray<number> inverse_length_normal_to_face = std::abs((
       phi_inner.normal_vector(0) * phi_inner.inverse_jacobian(0))[dim - 1]);
     const VectorizedArray<number> sigma =
       inverse_length_normal_to_face * get_penalty_factor();
-  
+
     const bool is_dirichlet = (data.get_boundary_id(face) == 0);
-  
+
     unsigned int face_q_points = phi_inner.normal_vector(0)[0][0] == 0. ? fe_degree_x + 1 : fe_degree_z + 1;
     for (unsigned int q = 0; q < face_q_points; q++)
     {
@@ -296,10 +296,10 @@ void LaplaceOperator<dim, fe_degree_x, fe_degree_z, number>::apply_boundary(
       phi_inner.submit_normal_derivative(-solution_jump * number(0.5), q);
       phi_inner.submit_value(test_by_value, q);
     }
-    
+
     // integrate
     phi_inner.integrate(EvaluationFlags::gradients);
-    
+
     // distribute_local_to_global
     phi_inner.distribute_local_to_global(dst);
     }
@@ -343,8 +343,8 @@ class LaplaceProblem
 
 template <int dim>
 LaplaceProblem<dim>::LaplaceProblem()
-  : fe(fe_degree_x, fe_degree_z, 
-       AnisotropicPolynomials<dim>({Polynomials::Legendre::generate_complete_basis(fe_degree_x), 
+  : fe(fe_degree_x, fe_degree_z,
+       AnisotropicPolynomials<dim>({Polynomials::Legendre::generate_complete_basis(fe_degree_x),
                                     Polynomials::Legendre::generate_complete_basis(fe_degree_z)}))
   , dof_handler(triangulation)
   , setup_time(0.)
@@ -432,20 +432,20 @@ void LaplaceProblem<dim>::assemble_rhs()
            ++face)
   {
     phi_face.reinit(face);
-  
+
     const VectorizedArray<double> inverse_length_normal_to_face = std::abs(
       (phi_face.normal_vector(0) * phi_face.inverse_jacobian(0))[dim - 1]);
     const VectorizedArray<double> sigma =
       inverse_length_normal_to_face * system_matrix.get_penalty_factor();
 
     unsigned int face_q_points = phi_face.normal_vector(0)[0][0] == 0. ? fe_degree_x + 1 : fe_degree_z + 1;
-  
+
     for (unsigned int q = 0; q < face_q_points; q++)
       {
         VectorizedArray<double> test_value = VectorizedArray<double>(),
                                 test_normal_derivative = VectorizedArray<double>();
         Point<dim, VectorizedArray<double>> point_batch = phi_face.quadrature_point(q);
-  
+
         for (unsigned int v = 0; v < VectorizedArray<double>::size(); ++v)
           {
             Point<dim> single_point;
@@ -469,13 +469,13 @@ void LaplaceProblem<dim>::assemble_rhs()
   }
 }
 
-
+//GO: How this function differs from the apply_face of the LaplaceOperator?
 template <int dim>
 void LaplaceProblem<dim>::inner_faces_loop()
 {
-  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, double> 
+  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, double>
     phi_outer(*system_matrix.get_matrix_free(), false);
-  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, double> 
+  FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, double>
     phi_inner(*system_matrix.get_matrix_free(), true);
 
   for (unsigned int inner_face = 0; inner_face < system_matrix.get_matrix_free()->n_inner_face_batches(); ++inner_face) {
@@ -506,10 +506,10 @@ void LaplaceProblem<dim>::inner_faces_loop()
                              phi_inner.inverse_jacobian(0))[dim - 1]) +
                    std::abs((phi_outer.normal_vector(0) *
                              phi_outer.inverse_jacobian(0))[dim - 1]));
-    const VectorizedArray<double> sigma = inverse_length_normal_to_face * 
+    const VectorizedArray<double> sigma = inverse_length_normal_to_face *
                                   double(std::max(fe_degree_x, fe_degree_z) * (std::max(fe_degree_x, fe_degree_z) + 1));
                                   std::cout << sigma << std::endl << std::endl;
-    
+
     // submit_values / submit_gradients
     for (unsigned int q = 0; q < face_q_points; q++)
     {
@@ -536,19 +536,19 @@ void LaplaceProblem<dim>::inner_faces_loop()
     //for (unsigned int q = 0; q < 2*face_q_points; q++)
       //std::cout << phi_inner.begin_gradients()[q] << "          " << phi_outer.begin_gradients()[q] << std::endl;
     //std::cout << std::endl;
-    
+
     // integrate
     phi_inner.integrate(EvaluationFlags::gradients);
     phi_outer.integrate(EvaluationFlags::gradients);
     //for (unsigned int q = 0; q < (fe_degree_x + 1)*(fe_degree_z + 1); q++)
       //std::cout << phi_inner.begin_dof_values()[q] << "          " << phi_outer.begin_dof_values()[q] << std::endl;
     //std::cout << std::endl;
-    
+
     // distribute_local_to_global
     phi_inner.distribute_local_to_global(solution);
     phi_outer.distribute_local_to_global(solution);
 
-    
+
     ///////// jump term
     /*
     // reinit on face
@@ -568,7 +568,7 @@ void LaplaceProblem<dim>::inner_faces_loop()
     phi_outer.evaluate(EvaluationFlags::values);
 
     unsigned int face_q_points = phi_inner.normal_vector(0)[0][0] == 0. ? fe_degree_x + 1 : fe_degree_z + 1;
-    
+
     // submit_values
     for (unsigned int q = 0; q < face_q_points; q++)
     {
@@ -581,7 +581,7 @@ void LaplaceProblem<dim>::inner_faces_loop()
     // integrate
     phi_inner.integrate(EvaluationFlags::values);
     phi_outer.integrate(EvaluationFlags::values);
-    
+
     // distribute_local_to_global
     phi_inner.distribute_local_to_global(solution);
     phi_outer.distribute_local_to_global(solution);
@@ -637,16 +637,16 @@ void LaplaceProblem<dim>::run(const double Lx, const double Lz, const unsigned N
   const Point<dim> & p2 = {Lx, Lz};
   std::vector<unsigned int> repetitions{Nx, Nz};
   GridGenerator::subdivided_hyper_rectangle(triangulation, repetitions, p1, p2);
- 
+
   std::cout << "  Number of active cells:       " << triangulation.n_active_cells() << std::endl;
-   
+
   setup_system();
   // arbitrary non-trivial "right hand side": we set it to [0,1,...,Ndofs-1]^T
   //for (unsigned int ii = 0; ii < std::size(system_rhs); ii++)
     //system_rhs[ii] = ii;
   assemble_rhs();
   //inner_faces_loop();
-  
+
   //system_matrix.vmult(solution, system_rhs);
   //for (unsigned int i = 0; i < solution.size(); i++)
     //std::cout << solution[i] << std::endl;
@@ -663,7 +663,7 @@ int main()
 
   LaplaceProblem<dim> lp;
   lp.run(Lx, Lz, Nx, Nz);
-  
+
 
 
   return 0;

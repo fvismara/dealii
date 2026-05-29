@@ -9,7 +9,10 @@
 
 using namespace dealii;
 
-/*---------------------------------------------- LaplaceOperator class -------------------------------------------------------*/
+/**
+ * Class for the Laplace operator
+ */
+//GO: Why is it derived from this class? I do not know what is its purpose
 template <int dim, int fe_degree_x, int fe_degree_z, typename number>
 class LaplaceOperator : public EnableObserverPointer
 {
@@ -76,7 +79,7 @@ int main()
 
   std::vector<unsigned int> repetitions{Nx, Nz};
   GridGenerator::subdivided_hyper_rectangle(triangulation, repetitions, p1, p2);
- 
+
   std::cout << "  Number of active cells:       " << triangulation.n_active_cells() << std::endl;
 
   using SystemMatrixType = LaplaceOperator<dim, fe_degree_x, fe_degree_z, double>;
@@ -85,8 +88,8 @@ int main()
   DoFHandler<dim>          dof_handler(triangulation);
   const MappingQ1<dim>     mapping;
 
-  const FE_DGQ_Aniso<dim> fe(fe_degree_x, fe_degree_z, 
-                            AnisotropicPolynomials<dim>({Polynomials::Legendre::generate_complete_basis(fe_degree_x), 
+  const FE_DGQ_Aniso<dim> fe(fe_degree_x, fe_degree_z,
+                            AnisotropicPolynomials<dim>({Polynomials::Legendre::generate_complete_basis(fe_degree_x),
                             Polynomials::Legendre::generate_complete_basis(fe_degree_z)}));
 
   LinearAlgebra::distributed::Vector<double> solution;
@@ -114,6 +117,7 @@ int main()
   system_matrix.initialize_dof_vector(system_rhs);
 
   // arbitrary non-trivial "right hand side": we set it to [0,1,...,Ndofs-1]^T
+  //GO: Small curiosity, it there a reason for std::size instead of .size()?
   for (unsigned int ii = 0; ii < std::size(system_rhs); ii++)
     system_rhs[ii] = ii;
 
@@ -127,24 +131,24 @@ int main()
   phi.reinit(0);
   phi.read_dof_values(system_rhs);
 
-  
+
   /*------------------- everything below this line is the expansion of the call to evaluate ------------------------------*/
   const unsigned int n_q_points_1d = max_degree + 1;
 
   // variant to evaluate tensor product
-  static const internal::EvaluatorVariant variant = 
-               internal::EvaluatorSelector<internal::MatrixFreeFunctions::ElementType::tensor_general, 
+  static const internal::EvaluatorVariant variant =
+               internal::EvaluatorSelector<internal::MatrixFreeFunctions::ElementType::tensor_general,
                (max_degree + n_q_points_1d > 4)>::variant;
   using Number = VectorizedArray<double>;
   using Number2 = typename FEEvaluationData<dim, Number, false>::shape_info_number_type;
- 
+
   // note: Eval is initialized with the maximum degree
   using Eval = internal::EvaluatorTensorProduct<variant, dim, max_degree + 1, n_q_points_1d, Number, Number2>;
   std::array<const internal::MatrixFreeFunctions::UnivariateShapeData<Number2> *, 3> univariate_shape_data;
- 
+
   const auto &shape_data = phi.get_shape_info().data;
   univariate_shape_data.fill(&shape_data.front());
- 
+
   if (shape_data.size() == dim)
     for (unsigned int i = 1; i < dim; ++i)
       univariate_shape_data[i] = &shape_data[i];
@@ -155,13 +159,13 @@ int main()
 
   // we want to compute values
   constexpr internal::EvaluatorQuantity value_type = internal::EvaluatorQuantity::value;
- 
+
   // these two lines compute (B^x_{cell}\kron B^y_{cell})*u_cell, where u_cell is in values_dofs and (B_{cell})_{i,j} = \Phi_j(x_i),
   // where \Phi_j is the jth basis function in 1d and x_i is the ith quadrature point in 1d. this is done in two steps
   // (multiply by the two matrices individually). the current implementation of Eval::apply relies on two assumptions:
   // 1) n_rows == n_columns for both matrices
   // 2) n_rows_1 == n_rows_2 and n_columns_1 == n_columns_2
-  // however, the product (A\kron B)*x is defined for A and B of arbitrary shape, as long as 
+  // however, the product (A\kron B)*x is defined for A and B of arbitrary shape, as long as
   // n_columns_1*n_columns_2 == std::size(x)
   // the two assumptions above generate issues when polynomial degrees are different. since we initialized Eval with
   // the largest degree, every operation in 'apply' assumes that std::size(values_dofs) = std::size(temp1) = std::size(
@@ -170,9 +174,9 @@ int main()
 
   Eval::apply<0, true, false, false, value_type, 1>(univariate_shape_data[0]->shape_values.begin(), values_dofs, temp1);
   Eval::apply<1, true, false, false, value_type, 1>(univariate_shape_data[1]->shape_values.begin(), temp1, values_quad);
-  
+
   // print the elements of (B^x_{cell}\kron B^y_{cell})*u_cell. in general we expect this object to have
-  // n_quadrature_points_x*n_quadrature_points_z = (fe_degree_x+1)*(fe_degree_z+1). if fe_degree_x == fe_degree_z 
+  // n_quadrature_points_x*n_quadrature_points_z = (fe_degree_x+1)*(fe_degree_z+1). if fe_degree_x == fe_degree_z
   // there's no problem. otherwise we have nans because of the issues mentioned above. also notice that we always
   // get vectors of size (max_degree+1)^2 as expected (but not as desired)
   for (const unsigned int q : phi.quadrature_point_indices()) {
