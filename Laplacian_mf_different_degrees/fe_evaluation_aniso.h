@@ -254,6 +254,55 @@ FEEvaluationAniso<dim, fe_degree_x, n_q_points_1d_x, fe_degree_z, n_q_points_1d_
     this->quadrature_points =
       &this->mapping_data->quadrature_points[0];
 
+
+  // Initialize the vector containing temporary quantities in the matrix free setting (e.g., values_quad, gradients_quad ...)
+  // In the current dealii code, this is done in the constructor of FEEvaluationData via a call to set_data_pointers.
+  // However, this creates problems in the case of different polynomial degrees, so we do it here.
+  const unsigned int dofs_per_component = this->data->dofs_per_component_on_cell;
+  // number of quadrature points in the current evaluation context. Since we are on a cell, this is the product of the
+  // quadrature points in 1d
+  const unsigned int n_quadrature_points_curr = this->data->data[0].n_q_points_1d * this->data->data[1].n_q_points_1d;
+
+  const unsigned int size_scratch_data =
+    dofs_per_component * this->n_components * 4 + 2 * n_quadrature_points_curr;
+  // In total, for each component we need ndofs for values_dofs; nquad for values_grad and values_from_gradients_quad; 
+  // dim*nquad for gradients_quad and gradients_from_hessians_quad; and (dim*(dim+1)/2)*nquad for hessians_quad 
+  // (hessian is symmetric)
+  const unsigned int size_data_arrays =
+    this->n_components * dofs_per_component +
+    (this->n_components * ((dim * (dim + 1)) / 2 + 2 * dim + 2) *
+     n_quadrature_points_curr);
+
+  // include 12 extra fields to insert some padding between values, gradients
+  // and hessians, which helps to reduce the probability of cache conflicts
+  const unsigned int allocated_size = size_scratch_data + size_data_arrays + 12;
+  this->scratch_data_array->resize_fast(allocated_size);
+  this->scratch_data.reinit(this->scratch_data_array->begin() + size_data_arrays + 12,
+                      size_scratch_data);
+
+  // set the pointers to the correct position in the data array
+  this->values_dofs = this->scratch_data_array->begin();
+  // 4 + ndofs for values_dofs
+  this->values_quad =
+    this->scratch_data_array->begin() + 4 + this->n_components * dofs_per_component;
+  // 2 + nquad for values_quad
+  this->values_from_gradients_quad =
+    this->scratch_data_array->begin() + 6 +
+    this->n_components * (dofs_per_component + n_quadrature_points_curr);
+  // 2 + nquad for values_from_gradients_quad
+  this->gradients_quad =
+    this->scratch_data_array->begin() + 8 +
+    this->n_components * (dofs_per_component + 2 * n_quadrature_points_curr);
+  // 4 + dim*nquad for gradients_quad
+  this->gradients_from_hessians_quad =
+    this->scratch_data_array->begin() + 12 +
+    this->n_components * (dofs_per_component + (dim + 2) * n_quadrature_points_curr);
+  // dim*nquad for gradients_from_hessians_quad (no padding here)
+  this->hessians_quad =
+    this->scratch_data_array->begin() + 12 +
+    this->n_components * (dofs_per_component + (2 * dim + 2) * n_quadrature_points_curr);
+  // the remaining (dim*(dim+1)/2)*nquad are assigned to hessians_quad (no padding here)
+
   if constexpr (running_in_debug_mode())
     {
       this->is_reinitialized           = true;
@@ -339,7 +388,7 @@ FEEvaluationAniso<dim, fe_degree_x, n_q_points_1d_x, fe_degree_z, n_q_points_1d_
   const VectorizedArrayType *grad_in = this->begin_gradients();
   for (unsigned int d = 0; d < dim; d++) {
     VectorizedArrayType temp = 0;
-    for (unsigned int dp = 0; dp < dim; dp++)
+    for (unsigned int dp = 0; dp < dim; dp++) 
       temp += this->inverse_jacobian(q_point)[d][dp] * grad_in[dp*n_q_points + q_point];
     grad_out[d] = temp;
   }
@@ -371,7 +420,7 @@ FEEvaluationAniso<dim, fe_degree_x, n_q_points_1d_x, fe_degree_z, n_q_points_1d_
     VectorizedArrayType temp = 0;
     for (unsigned int dp = 0; dp < dim; dp++) 
       temp += this->inverse_jacobian(q_point)[dp][d] * this->JxW(q_transf)*grad_in[dp];
-    
+      
     this->begin_gradients()[d*n_q_points + q_point] = temp;
   }
 }
@@ -523,7 +572,7 @@ inline FEFaceEvaluationAniso<dim, fe_degree_x, n_q_points_1d_x, fe_degree_z, n_q
   , dofs_per_component((fe_degree_x + 1)*(fe_degree_z + 1))
   , dofs_per_cell((fe_degree_x + 1)*(fe_degree_z + 1) * n_components_)
   , n_q_points(n_q_points_1d_x*n_q_points_1d_z)
-{}
+{}       
 
 
 // same as FEFaceEvaluation::reinit
@@ -605,6 +654,43 @@ inline void FEFaceEvaluationAniso<dim, fe_degree_x, n_q_points_1d_x, fe_degree_z
     is_vertical = true;
     is_right_or_top = this->normal_vector(0)[0][0] > 0;
   }
+
+  // See the equivalent lines in FEEvaluationAniso::reinit for a brief explanation of what we are going to do here
+  const unsigned int dofs_per_component = this->data->dofs_per_component_on_cell;
+  // number of quadrature points in the current evaluation context. Since we are on a face, this is the number of
+  // one of the two 1d quadratures, according to the face orientation
+  const unsigned int n_quadrature_points_curr = this->data->data[is_vertical ? 1 : 0].n_q_points_1d;
+
+  const unsigned int size_scratch_data =
+    dofs_per_component * this->n_components * 4 + 2 * n_quadrature_points_curr;
+  const unsigned int size_data_arrays =
+    this->n_components * dofs_per_component +
+    (this->n_components * ((dim * (dim + 1)) / 2 + 2 * dim + 2) *
+     n_quadrature_points_curr);
+
+  // include 12 extra fields to insert some padding between values, gradients
+  // and hessians, which helps to reduce the probability of cache conflicts
+  const unsigned int allocated_size = size_scratch_data + size_data_arrays + 12;
+  this->scratch_data_array->resize_fast(allocated_size);
+  this->scratch_data.reinit(this->scratch_data_array->begin() + size_data_arrays + 12,
+                      size_scratch_data);
+
+  // set the pointers to the correct position in the data array
+  this->values_dofs = this->scratch_data_array->begin();
+  this->values_quad =
+    this->scratch_data_array->begin() + 4 + this->n_components * dofs_per_component;
+  this->values_from_gradients_quad =
+    this->scratch_data_array->begin() + 6 +
+    this->n_components * (dofs_per_component + n_quadrature_points_curr);
+  this->gradients_quad =
+    this->scratch_data_array->begin() + 8 +
+    this->n_components * (dofs_per_component + 2 * n_quadrature_points_curr);
+  this->gradients_from_hessians_quad =
+    this->scratch_data_array->begin() + 12 +
+    this->n_components * (dofs_per_component + (dim + 2) * n_quadrature_points_curr);
+  this->hessians_quad =
+    this->scratch_data_array->begin() + 12 +
+    this->n_components * (dofs_per_component + (2 * dim + 2) * n_quadrature_points_curr);
 
   if constexpr (running_in_debug_mode())
     {
@@ -793,9 +879,10 @@ inline void
 FEFaceEvaluationAniso<dim, fe_degree_x, n_q_points_1d_x, fe_degree_z, n_q_points_1d_z, n_components_,
                   Number, VectorizedArrayType>::submit_value(const value_type val_in, const unsigned int q_point)
 {
-  this->begin_values()[q_point] = this->J_value[0] *
-                                  this->mapping_data->descriptor[is_vertical ? 1 : 0].quadrature_weights[q_point] *
-                                  val_in;
+  VectorizedArrayType *values = this -> values_quad + q_point;
+  values[0] = this->J_value[0] *
+                               this->mapping_data->descriptor[is_vertical ? 1 : 0].quadrature_weights[q_point] *
+                               val_in;
 }
 
 
@@ -826,7 +913,7 @@ FEFaceEvaluationAniso<dim, fe_degree_x, n_q_points_1d_x, fe_degree_z, n_q_points
   unsigned int face_q_points = is_vertical ? n_q_points_1d_z : n_q_points_1d_x;
   for (unsigned int d = 0; d < dim; d++)
   {
-    this->begin_gradients()[d*face_q_points + q_point] = inverse_jacobian_times_n[d] *
+    this->gradients_quad[d*face_q_points + q_point] = inverse_jacobian_times_n[d] *
                             this->J_value[0] *
                             this->mapping_data->descriptor[is_vertical ? 1 : 0].quadrature_weights[q_point] *
                             grad_in;

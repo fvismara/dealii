@@ -3241,17 +3241,42 @@ void MatrixFree<dim, Number, VectorizedArrayType>::reinit_new(
     const AdditionalData                                   &additional_data)
 {
   
-  // Call standard reinit with first quadrature to set up dof_info and mapping_info
+  // Call standard reinit with first quadrature to set up basic structures
   std::vector<const DoFHandler<dim> *> dof_handlers_vec(dof_handlers_in);
   std::vector<const AffineConstraints<number2> *> constraints_vec(constraints_in);
-  
-  reinit(mapping_in, dof_handlers_vec, constraints_vec, quadratures[0], additional_data);
+
+  // We call MatrixFree::reinit using the quadrature formula with the most quadrature points,
+  // to avoid problems with dimensions and memory management
+  reinit(mapping_in, dof_handlers_vec, constraints_vec, 
+    quadratures[quadratures[0].size() > quadratures[1].size() ? 0 : 1], additional_data);
 
   Quadrature<2> tens_quad(quadratures[0], quadratures[1]);
   mapping_info.cell_data[0].descriptor[0].quadrature = tens_quad;
   mapping_info.cell_data[0].descriptor[0].n_q_points = tens_quad.size();
   mapping_info.cell_data[0].descriptor[0].quadrature_weights.resize(tens_quad.size());
   mapping_info.cell_data[0].quadrature_points.resize(tens_quad.size());
+  
+  // Now we need to collect information on the jacobian and its determinant. In the current dealii
+  // implementation, this is done in MatrixFree::reinit via FEEvaluation objects. Now we are relying
+  // on our FEEvaluationAniso class, so resorting to FEEvaluation would give problems in the case of
+  // different polynomial degrees. For this reason, we store the values of jacobian and determinant here.
+  // We do this via FEValues, where we use a dummy FE_Nothing for the finite element. This is not relevant
+  // because the information on the jacobian is contained in the mapping.
+  // ASSUMPTION: here we assume that the jacobian is constant throughout the computational domain, so that
+  // we can consider one cell (say the first one) and one quadrature point (say the 0th). Otherwise we would
+  // have to loop over the cells and the quadrature points
+  FE_Nothing<dim,dim> fe_dummy;
+  DoFHandler<dim> dof_handler_dummy(dof_handlers_in[0]->get_triangulation());
+  dof_handler_dummy.distribute_dofs(fe_dummy);
+  FEValues<dim,dim> fe_values(mapping_in, fe_dummy, tens_quad, update_jacobians | update_inverse_jacobians);
+
+  fe_values.reinit(dof_handler_dummy.begin_active());
+  for (unsigned int i = 0; i < dim; i++)
+    for (unsigned int j = 0; j < dim; j++)
+    //recall that cell_data[0].jacobians[0][0] is the inverse transposed jacobian
+      mapping_info.cell_data[0].jacobians[0][0][i][j] = fe_values.inverse_jacobian(0)[j][i];
+  mapping_info.cell_data[0].JxW_values[0] = fe_values.jacobian(0).determinant();
+
   for (unsigned int i = 0; i < tens_quad.size(); ++i)
   {
     mapping_info.cell_data[0].descriptor[0].quadrature_weights[i] = tens_quad.weight(i);
@@ -3288,7 +3313,7 @@ void MatrixFree<dim, Number, VectorizedArrayType>::reinit_new(
     // Total dofs per component
     unsigned int dofs_total = 1;
     for (unsigned int direction = 0; direction < dim; direction++)
-      dofs_total *= (finite_elements[direction].degree + 1);
+      dofs_total *= (finite_elements[direction]->degree + 1);
     shape_info(comp,0,0,0).dofs_per_component_on_cell = dofs_total;
 
     shape_info(comp,0,0,0).n_dimensions = dim;
@@ -3298,11 +3323,11 @@ void MatrixFree<dim, Number, VectorizedArrayType>::reinit_new(
     // Build 1D shape data for each direction
     for (unsigned int direction = 0; direction < dim; direction++) {
       n_quad_1d = quadratures[direction].size();
-      n_dofs_1d = finite_elements[direction].degree + 1;
+      n_dofs_1d = finite_elements[direction]->degree + 1;
       shape_info(comp,0,0,0).data[direction].element_type = internal::MatrixFreeFunctions::tensor_general;
       shape_info(comp,0,0,0).data[direction].quadrature = quadratures[direction];
       shape_info(comp,0,0,0).data[direction].n_q_points_1d = n_quad_1d;
-      shape_info(comp,0,0,0).data[direction].fe_degree = finite_elements[direction].degree;
+      shape_info(comp,0,0,0).data[direction].fe_degree = finite_elements[direction]->degree;
 
       shape_info(comp,0,0,0).data[direction].shape_values.resize(n_dofs_1d*n_quad_1d);
       shape_info(comp,0,0,0).data[direction].shape_gradients.resize(n_dofs_1d*n_quad_1d);
@@ -3316,24 +3341,24 @@ void MatrixFree<dim, Number, VectorizedArrayType>::reinit_new(
         for (unsigned int q = 0; q < n_quad_1d; q++)
         {
           shape_info(comp,0,0,0).data[direction].shape_values[q * n_dofs_1d + i] = 
-            finite_elements[direction].shape_value(i, quadratures[direction].point(q));
+            finite_elements[direction]->shape_value(i, quadratures[direction].point(q));
           shape_info(comp,0,0,0).data[direction].shape_gradients[q * n_dofs_1d + i] =
-            finite_elements[direction].shape_grad(i, quadratures[direction].point(q))[0];
+            finite_elements[direction]->shape_grad(i, quadratures[direction].point(q))[0];
           shape_info(comp,0,0,0).data[direction].shape_hessians[q * n_dofs_1d + i] =
-            finite_elements[direction].shape_grad_grad(i, quadratures[direction].point(q))[0][0];
+            finite_elements[direction]->shape_grad_grad(i, quadratures[direction].point(q))[0][0];
         }
         shape_info(comp,0,0,0).data[direction].shape_data_on_face[0][i] =
-          finite_elements[direction].shape_value(i, Point<1>(0.));
+          finite_elements[direction]->shape_value(i, Point<1>(0.));
         shape_info(comp,0,0,0).data[direction].shape_data_on_face[0][i + n_dofs_1d] =
-          finite_elements[direction].shape_grad(i, Point<1>(0.))[0];
+          finite_elements[direction]->shape_grad(i, Point<1>(0.))[0];
         shape_info(comp,0,0,0).data[direction].shape_data_on_face[0][i + 2*n_dofs_1d] =
-          finite_elements[direction].shape_grad_grad(i, Point<1>(0.))[0][0];
+          finite_elements[direction]->shape_grad_grad(i, Point<1>(0.))[0][0];
         shape_info(comp,0,0,0).data[direction].shape_data_on_face[1][i] =
-          finite_elements[direction].shape_value(i, Point<1>(1.));
+          finite_elements[direction]->shape_value(i, Point<1>(1.));
         shape_info(comp,0,0,0).data[direction].shape_data_on_face[1][i + n_dofs_1d] =
-          finite_elements[direction].shape_grad(i, Point<1>(1.))[0];
+          finite_elements[direction]->shape_grad(i, Point<1>(1.))[0];
         shape_info(comp,0,0,0).data[direction].shape_data_on_face[1][i + 2*n_dofs_1d] =
-          finite_elements[direction].shape_grad_grad(i, Point<1>(1.))[0][0];
+          finite_elements[direction]->shape_grad_grad(i, Point<1>(1.))[0][0];
 
       }
 
