@@ -1,5 +1,5 @@
-// This file solves the Poisson equation -\Delta u = f on the 2d unit square [0,1]x[0,1] using SIPG
-// and a matrix free implementation. 
+// Solves the Poisson equation -\Delta u = f on the rectangle [0,Lx]x[0,Lz] using SIPG
+// and a matrix free implementation. We use Legendre polynomials in both directions (with different degrees)
 
 #include <deal.II/base/convergence_table.h>
 #include <deal.II/fe/fe_dgq.h>
@@ -22,7 +22,7 @@ using namespace dealii;
 
 
 const unsigned int dim = 2;
-const unsigned int fe_degree_x = 3, fe_degree_z = 2;
+const unsigned int fe_degree_x = 2, fe_degree_z = 10;
 
 
 /*----------------------------------------------------- Solution -------------------------------------------------------------*/
@@ -362,7 +362,7 @@ void LaplaceProblem<dim>::setup_system()
   AffineConstraints<double> dummy;
   dummy.close();
 
-  const std::vector<FE_DGQLegendre<1>> fe_vector{fe_x, fe_z};
+  const std::vector<const FE_DGQLegendre<1> *> fe_vector{&fe_x, &fe_z};
   const std::vector<QGauss<1>> q_vector{quad_x, quad_z};
 
   typename MatrixFree<dim, double>::AdditionalData additional_data;
@@ -417,6 +417,7 @@ void LaplaceProblem<dim>::assemble_rhs()
       phi.distribute_local_to_global(system_rhs);
     }
 
+    
   // contribution of boundary conditions to the rhs vector
   FEFaceEvaluationAniso<dim, fe_degree_x, fe_degree_x + 1, fe_degree_z, fe_degree_z + 1, 1, double> phi_face(data, true);
   for (unsigned int face = data.n_inner_face_batches(); face < data.n_inner_face_batches() + data.n_boundary_face_batches();
@@ -439,23 +440,25 @@ void LaplaceProblem<dim>::assemble_rhs()
         for (unsigned int v = 0; v < data.n_active_entries_per_face_batch(face); ++v)
           {
             Point<dim> single_point;
+            //Point<dim> single_point_2;
             std::pair< typename DoFHandler< dim >::cell_iterator, unsigned int > pair_test = data.get_face_iterator(face, v);
-            auto faceit = *(pair_test.first->face(pair_test.second));
             // transform the quadrature point from the reference interval [0,1] to the present boundary face
             if (!phi_face.is_vertical)
             {
               // horizontal face
-              single_point[0] = quad_x.point(q)[0]*(faceit.vertex(1)[0] - faceit.vertex(0)[0]) + faceit.vertex(0)[0];
-              single_point[1] = faceit.vertex(0)[1];
+              if (phi_face.is_right_or_top)
+                single_point = mapping.transform_unit_to_real_cell(pair_test.first, Point<dim>(quad_x.point(q)[0], 1.0));
+              else
+                single_point = mapping.transform_unit_to_real_cell(pair_test.first, Point<dim>(quad_x.point(q)[0], 0.0));
             }
             else
             {
               // vertical face
-              single_point[0] = faceit.vertex(0)[0];
-              single_point[1] = quad_z.point(q)[0]*(faceit.vertex(1)[1] - faceit.vertex(0)[1]) + faceit.vertex(0)[1];
+              if (phi_face.is_right_or_top)
+                single_point = mapping.transform_unit_to_real_cell(pair_test.first, Point<dim>(1.0, quad_z.point(q)[0]));
+              else
+                single_point = mapping.transform_unit_to_real_cell(pair_test.first, Point<dim>(0.0, quad_z.point(q)[0]));
             }
-            // the if-loop above can be made more efficient and/or compact. so far this is specialized to the case 
-            // of a cartesian grid. this could also be done via mapping.transform_unit_to_real_cell() as before
 
             if (data.get_boundary_id(face) == 0)
               // dirichlet
@@ -543,6 +546,11 @@ void LaplaceProblem<dim>::run(const double Lx, const double Lz, const unsigned N
 
   std::cout << "  Number of active cells:       " << triangulation.n_active_cells() << std::endl;
 
+  // set neumann boundary conditions on the bottom boundary
+  for (typename Triangulation<dim,dim>::face_iterator f = triangulation.begin_face(); f < triangulation.end_face(); ++f)
+    if (f->at_boundary() && f->center()[1] == 0)
+      f -> set_boundary_id(1);
+
   setup_system();
   assemble_rhs();
   solve();
@@ -575,17 +583,44 @@ void convergence_test_xz()
 }
 
 
+void convergence_test_x()
+{
+  const double Lx = 1, Lz = 1;
+  unsigned int Nz = 100;  
+  ConvergenceTable convergence_table; 
+
+  for (unsigned int cycle = 1; cycle < 15; cycle++) 
+  {
+    LaplaceProblem<dim> lp;
+    unsigned int Nx = 2*cycle;
+    lp.run(Lx, Lz, Nx, Nz);
+
+    convergence_table.add_value("Nx", Nx);
+    convergence_table.add_value("Nz", Nz);
+    convergence_table.add_value("dx", Lx/Nx);
+    convergence_table.add_value("dz", Lz/Nz);
+    convergence_table.add_value("L2err", lp.get_error());
+  }
+
+  convergence_table.set_precision("L2err", 3);
+  convergence_table.set_scientific("L2err", true);
+  convergence_table.evaluate_convergence_rates("L2err", "dx", ConvergenceTable::reduction_rate_log2, 1);
+  convergence_table.write_text(std::cout);
+}
+
+
 /*--------------------------------------------------------- main ------------------------------------------------------------*/
 int main()
 {
-  //const double Lx = 1, Lz = 1;
-  //const unsigned int Nx = 8, Nz = 8;
+  const double Lx = 1, Lz = 1;
+  const unsigned int Nx = 7, Nz = 5;
 
-  //LaplaceProblem<dim> lp1;
-  //lp1.run(Lx, Lz, Nx, Nz);
-  //std::cout << "L2 error: " << lp1.get_error() << std::endl;
+  LaplaceProblem<dim> lp1;
+  lp1.run(Lx, Lz, Nx, Nz);
+  std::cout << "L2 error: " << lp1.get_error() << std::endl;
 
-  convergence_test_xz();
-  
+  //convergence_test_xz();
+  //convergence_test_x();
+
   return 0;
 }
