@@ -1,0 +1,552 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{microtype}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\pdfstringdefDisableCommands{\def\code#1{#1}}
+\setlist{itemsep=2pt,topsep=4pt}
+\newcommand{\Lag}{\mathscr{L}}
+\usepackage{mathrsfs}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\winf}{w_\infty}
+\renewcommand{\arraystretch}{1.15}
+
+\title{DG--Laguerre schemes for the Euler equations on a half-space:\\[2pt]
+\large primitive vs.\ conservative variables, and two treatments of the unbounded direction}
+\author{}
+
+\emergencystretch=3em
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent This report compares two design choices for matrix-free DG--Laguerre
+discretizations of the Euler equations with reaction on
+$\Omega=\Omega_b\times[0,\infty)$: (i) primitive variables $(\rho,u,E)$ versus
+conservative variables $(\rho,\rho u,E)$ as expanded unknowns, and (ii) the
+treatment of the unbounded direction $z$ in \code{laguerre\_systems.cc} (code A, following the notes
+\emph{laguerre\_systems.pdf}: pure (standalone)
+Laguerre basis, exact $z$-integration) versus \code{laguerre\_systems\_2.cc} (code B, following the notes
+\emph{laguerre\_systems\_2.pdf}: DG--Legendre
+intervals plus a Laguerre tail, numerical (inexact) quadrature). In A we project the $d$-system onto a $(d-1)-$system by integrating in $(0,\infty)$ first; in this case we compute the Rusanov flux of the projected system, with one $\lambda$ per $x$-face point. In B the Rusanov flux is evaluated pointwise at every $z$-point with local $\lambda(z)$, and \emph{then} integrated. All numbers come from runs
+of the two programs on the same machine, single core, 2D ($d=2$, $\Omega_b=(0,10)$,
+80 cells, DG $Q_3$ in $x$) unless stated otherwise.
+
+\smallskip\noindent\textbf{Main findings.}
+\begin{itemize}
+\item The accuracy gap between the codes with pure Laguerre bases comes from the
+  \emph{choice of variables}, not from exact integration. In primitive variables the
+  quadrature-based code reproduces the errors of the exact-integration code to
+  within 4\%.
+\item In a pure Laguerre basis, primitive variables are 1.5--2$\times$ more
+  accurate on the moving vortex. The reason is approximation: the momentum and
+  energy perturbations contain narrower structures than the velocity perturbation.
+  With a local (DG-in-$z$) basis this advantage disappears.
+\item Primitive variables cost an extra mass-matrix solve: $2.6$--$3.9\times$ the run
+  time with pure Laguerre and $1.6$--$1.9\times$ with the hybrid basis. Stability limits are
+  identical.
+\item For the $z$-direction, the hybrid DG--Legendre $+$ Laguerre-tail basis of
+  code B is the better choice. It reaches $7.7\cdot10^{-6}$ in
+  3.9\,s, against $2.6\cdot10^{-5}$ in 25.8\,s for the pure Laguerre code. Exact
+  $z$-integration buys no measurable accuracy over pointwise quadrature, and each
+  time step costs about $5\times$ more. (i.e. the Propositions with quadrature results listed in \emph{laguerre\_systems.pdf} are not that useful in practice, approximate quadrature is almost as accurate and does not require storage of several matrices)
+\end{itemize}
+\end{abstract}
+
+\section{Setting, codes and test problems}
+
+\paragraph{Equations.} We solve
+$\partial_t(M(w)w)+\nabla\cdot F(w)=b(w,x,z,t)$ with $w=(\rho,u,E)$,
+$M(w)w=(\rho,\rho u,E)$, $p=(\gamma-1)(E-\tfrac12\rho|u|^2)$, $\gamma=1.4$, and
+$b=(0,\rho g,\rho u\cdot g)-\Gamma(z)\,(M(w)w-M(\winf)\winf)$, where
+$\Gamma_{ii}(z)=\Delta\gamma_i/(1+e^{(\alpha_i-z)/\sigma_i})$ is a sigmoidal
+damping layer. Solutions tend to the far-field state $\winf$ as $z\to\infty$. The
+perturbation from the far field is expanded in $z$,
+\begin{equation}\label{eq:exp}
+V(x,z,t)\approx V_\infty+\sum_j W_j(x,t)\,\psi_j(z),
+\end{equation}
+where $V$ is either the primitive vector $w$ or the conservative vector $U=M(w)w$.
+Each $W_j$ is a DG function on $\Omega_b$. Testing with $\psi_i$ and integrating
+over $z$ gives the projected system
+$\partial_t\tilde a+\nabla_x\cdot\tilde B=\tilde h$ of the notes, which is
+discretized with matrix-free DG in $x$ and explicit low-storage RK(5,4) in time.
+
+\filbreak
+\paragraph{Implementations compared.}
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\textbf{A} & \code{laguerre\_systems.cc}: primitive variables, pure Laguerre basis
+  $\psi_j=\Lag^\mu_j=e^{-\mu z/2}L_j(\mu z)$, exact $z$-integrals (Proposition 2),
+  Rusanov flux of the projected system, momentum mass solved by preconditioned CG.\\
+\textbf{B$_c$} & \code{laguerre\_systems\_2.cc} with conservative variables (default):
+  DG--Legendre on $N_z$ intervals of $[0,L_z]$ plus a Laguerre tail on $[L_z,\infty)$
+  ($N_z=0$: pure Laguerre), pointwise $z$-quadrature, local Lax--Friedrichs flux at
+  every $z$-point, diagonal mass.\\
+\textbf{B$_p$} & \code{laguerre\_systems\_2.cc} with primitive variables (option
+  \code{primitive}): as B$_c$, with the momentum mass solved directly
+  (Section~\ref{sec:primitive-impl}).\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{Test problems.}
+\begin{itemize}
+\item \emph{Vortex along $x$}: the isentropic vortex of step-67 in the $(x,z)$ plane,
+  centered at $(3,2)$ and advected with far-field velocity $u_\infty=e_x$. It is an
+  exact solution without source, with exact Dirichlet data on all boundaries. We
+  report the $L^2(\Omega_b\times(0,\infty))$ error of the density at $t=1$, the same
+  metric in all codes, computed with a fine $z$-rule.
+\item \emph{Vortex along $+z$}: center $(5,2)$, $u_\infty=e_z$, up to $t=6$. The
+  vortex rises into a damping layer ($\Delta\gamma=3$, $\alpha=4.5$, $\sigma=0.4$,
+  all components) or, without damping, into the region the $z$-basis cannot
+  resolve. This is a qualitative and long-time stability test.
+\item \emph{Manufactured solution} (B only): smooth perturbation decaying like
+  $e^{-z}$, constant reaction $0.5$, gravity $g=-0.5\,e_z$, $t=0.1$, mesh
+  $(0,1)^{d-1}$.
+\end{itemize}
+
+%=====================================================================
+\section{Primitive vs.\ conservative variables}
+%=====================================================================
+
+\subsection{Theory}
+
+\paragraph{1. Structure of the semi-discrete system.}
+Both formulations discretize the same balance law in conservation form; only the
+expanded variable $V$ in \eqref{eq:exp} differs.
+\begin{itemize}
+\item \emph{Conservative} ($V=U$): $\tilde a$ is linear in the unknowns, so the
+  semi-discrete system is $\mathbb M\,\dot W=R(W)$ with the constant matrix
+  $\mathbb M=M_x\otimes M_z$. Here $M_z$ is diagonal, because the $\psi_j$ are
+  orthogonal ($\int\Lag_i^\mu\Lag_j^\mu=\delta_{ij}/\mu$, and orthonormal Legendre
+  polynomials on each interval). An explicit stage costs one cell-wise inverse mass
+  application.
+\item \emph{Primitive} ($V=w$): $\tilde a$ is nonlinear in $W$. The density and
+  energy rows are unchanged, $\partial_t\int\rho\,\psi_i=m_i\dot\rho_i$, but the
+  momentum rows become
+  \begin{equation}\label{eq:mom}
+  \sum_k\Big[\int\rho\,\psi_i\psi_k\,dz\Big]\dot u_k
+  \;=\;R^m_i-\int\dot\rho\,u\,\psi_i\,dz ,
+  \end{equation}
+  where $\dot\rho$ is known from the density equation. The matrix in \eqref{eq:mom}
+  is a $\rho$-weighted mass matrix. It is SPD if and only if $\rho>0$, depends on the
+  state, and couples all $z$-modes, and through $x$ all DoFs of a cell. Every RK
+  stage therefore needs a cell-local linear solve.
+\end{itemize}
+
+\paragraph{2. Polynomial structure of the fluxes.}
+In primitive variables $M(w)w$, $F(w)$ and the gravity source are polynomials of
+degree at most $4$ in the entries of $w$; for example $(E+p)u=\gamma Eu-\tfrac{\gamma-1}{2}\rho|u|^2u$.
+This is what makes Proposition 2 of \emph{laguerre\_systems.pdf} possible: products of Laguerre
+expansions are integrated \emph{exactly} by Gauss--Laguerre rules with scaling
+$(s+1)\mu/2$, $s=0,\dots,4$. In conservative variables $u=m/\rho$ and $p$ are
+rational functions of $U$, so no finite rule is exact and the $z$-integrals always
+carry a quadrature (aliasing) error. Section~\ref{sec:num-vars} shows that, at the
+resolutions used here, this error is \emph{not} the dominant one.
+
+\paragraph{3. Conservation.}
+Both formulations are conservative in $x$: each Laguerre moment satisfies a
+flux-form equation, and the single-valued numerical fluxes telescope across
+interior faces. In the primitive formulation the conserved quantity is the discrete
+$\tilde a(W)$, evaluated with the same quadrature as the mass term. In B$_p$ the
+$\rho$-weight is collocated at the $p+1$ Gauss points in $x$. Since the DG basis is a
+partition of unity, summing the test functions shows that
+$\sum_q J_q w_q\,\partial_t(\rho u)(x_q)$ changes only through boundary fluxes. In
+$z$, exact global conservation would require the constant function in the test
+space. The Laguerre functions do not contain it, whereas the DG intervals of B do
+contain it locally. This limitation is common to both choices of variables.
+
+\paragraph{4. Approximation properties.}
+The discrete solution lives in $V_\infty+\operatorname{span}\{\psi_j\}$, so accuracy
+depends on how well the basis approximates the \emph{chosen} variables. For the
+moving vortex let $f\propto e^{-|x-x_c|^2}$, a Gaussian of width $1$. Then
+\begin{gather*}
+u'=u-u_\infty\propto f\cdot(z-z_c),\qquad
+\rho'=(1-c f^2)^{1/(\gamma-1)}-1\sim f^2,\\
+m'=\rho u-\rho_\infty u_\infty=\rho_\infty u'+u_\infty\rho'+\rho'u'.
+\end{gather*}
+Because the far-field velocity is nonzero, the momentum perturbation contains
+$u_\infty\rho'$, which has the narrower width $1/\sqrt2$ of $f^2$. The energy
+perturbation contains $\rho|u|^2$ and is similarly narrow. The velocity perturbation
+has the width of $f$.
+
+A global Laguerre basis converges spectrally, with a rate that depends strongly on
+the width and analyticity of the function. Its resolution also degrades with height,
+since the node spacing grows like $\sqrt{z/(\mu p_z)}$. Narrower functions are
+therefore approximated much worse. A local piecewise-polynomial basis converges
+algebraically, and the width enters only through a constant.
+
+A related remark follows from Remark 6 of the notes. If each perturbation decays
+like $e^{-\mu z/2}$, then the products in $m'$ and $E'$ decay like $e^{-\mu z}$,
+faster than the basis. In conservative variables these products are part of the
+expanded unknown and must be approximated in the basis. In primitive variables they
+appear only inside the flux integrals, where Proposition 2 handles them exactly.
+
+\paragraph{5. Cost.}
+\begin{itemize}
+\item Conservative: a diagonal-in-$z$ inverse mass, $O(\#\text{DoFs})$ per stage.
+\item Primitive, B$_p$\label{sec:primitive-impl}: the $\rho$-weight is collocated at
+  the $p+1$ Gauss points in $x$, where the cell mass matrix is exact. System
+  \eqref{eq:mom} then splits into one dense SPD system of size $n_s$, the number of
+  modes of segment $s$, per $x$-point and segment. In $z$, the $\rho_\infty$ part is
+  the exact diagonal mass and the $\rho-\rho_\infty$ part uses the segment's
+  $z$-quadrature. Assembly costs $O(Q_s n_s^2)$ and the Cholesky factorization
+  $O(n_s^3/3)$; both are dominated by the Laguerre tail.
+\item Primitive, A: the $\rho$-weighted mass uses Gauss($p+3$) in $x$ and is solved by
+  CG, preconditioned by the same collocated operator. It needs 3--4 iterations.
+\end{itemize}
+
+\paragraph{6. Robustness.}
+The primitive formulation requires $\rho>0$ for an SPD mass matrix. Both codes bound
+the Cholesky pivot from below. Both formulations need $\rho,p>0$ for the wave speeds
+in the fluxes and in the time-step estimate.
+
+\subsection{Numerical comparison}\label{sec:num-vars}
+
+\paragraph{Manufactured solution (B, hybrid basis, $L_z=2$, $p_z=20$).}
+Free-stream preservation holds to $|R(0)|=5.9\cdot10^{-13}$ in both formulations.
+Errors are $L^2$ errors of all conservative components.
+\begin{center}
+\begin{tabular}{@{}rrcccc@{}}
+\toprule
+cells$_x$ & $N_z$ & B$_c$ error & rate & B$_p$ error & rate\\
+\midrule
+2 & 4 & $4.34\cdot10^{-3}$ & -- & $4.48\cdot10^{-3}$ & --\\
+4 & 8 & $3.48\cdot10^{-4}$ & 3.64 & $4.51\cdot10^{-4}$ & 3.31\\
+8 & 16 & $2.11\cdot10^{-5}$ & 4.05 & $2.33\cdot10^{-5}$ & 4.27\\
+16 & 32 & $1.33\cdot10^{-6}$ & 3.99 & $1.43\cdot10^{-6}$ & 4.03\\
+\bottomrule
+\end{tabular}
+\end{center}
+Both formulations converge at the optimal rate 4 for $Q_3$. Here the primitive
+errors are 3--30\% larger, and its run time is about 10\% higher. 3D ($Q_2$) gives the
+same picture: $3.09\cdot10^{-2}\to4.70\cdot10^{-3}$ conservative and
+$3.15\cdot10^{-2}\to4.62\cdot10^{-3}$ primitive.
+
+\paragraph{Vortex along $x$: accuracy and cost.}
+Density error at $t=1$; wall times in parentheses. B is run at Courant number 1.5.
+\begin{center}
+\resizebox{\textwidth}{!}{\begin{tabular}{@{}lccc@{}}
+\toprule
+$z$-basis & B$_c$ (conservative) & B$_p$ (primitive) & A (primitive, exact)\\
+\midrule
+Laguerre $p_z=24$, $\mu=10$ & $1.49\cdot10^{-3}$ (2.6\,s) & $8.57\cdot10^{-4}$ (6.7\,s) & $8.51\cdot10^{-4}$ (5.6\,s)\\
+Laguerre $p_z=32$, $\mu=10$ & $5.13\cdot10^{-4}$ (4.8\,s) & $2.41\cdot10^{-4}$ (14.9\,s) & $2.33\cdot10^{-4}$ (10.1\,s)\\
+Laguerre $p_z=48$, $\mu=10$ & $4.00\cdot10^{-5}$ (12.6\,s) & $2.62\cdot10^{-5}$ (49.1\,s) & $2.61\cdot10^{-5}$ (25.8\,s)\\
+\midrule
+hybrid $N_z=8$, $L_z=6$, tail $p_z=16$ & $2.93\cdot10^{-3}$ (1.3\,s) & $6.28\cdot10^{-3}$ (2.5\,s) & --\\
+hybrid $N_z=16$ & $3.19\cdot10^{-4}$ (2.1\,s) & $4.61\cdot10^{-4}$ (3.5\,s) & --\\
+hybrid $N_z=32$ & $7.71\cdot10^{-6}$ (3.9\,s) & $9.19\cdot10^{-6}$ (6.2\,s) & --\\
+\bottomrule
+\end{tabular}}
+\end{center}
+Two observations stand out.
+\begin{itemize}
+\item With pure Laguerre, primitive variables are $1.5$--$2.1\times$ more accurate.
+  B$_p$ and A agree to within 4\% although B$_p$ uses inexact pointwise quadrature
+  and A exact integration.
+\item With the hybrid basis the ranking reverses: conservative variables are
+  $1.2$--$2.1\times$ more accurate.
+\end{itemize}
+
+\paragraph{Is it quadrature aliasing?}
+We repeated the runs with more $z$-points: Laguerre tail $60\to150$ points
+($p_z=24$), $76\to150$ ($p_z=32$), and interval rule $5\to9$ points (hybrid
+$N_z=16$).
+\begin{center}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+& B$_c$: default $\to$ refined & B$_p$: default $\to$ refined\\
+\midrule
+Laguerre $p_z=24$ & $1.49\cdot10^{-3}\to1.58\cdot10^{-3}$ & $8.57\cdot10^{-4}\to8.45\cdot10^{-4}$\\
+Laguerre $p_z=32$ & $5.13\cdot10^{-4}\to4.83\cdot10^{-4}$ & $2.41\cdot10^{-4}\to2.31\cdot10^{-4}$\\
+hybrid $N_z=16$ & $3.19\cdot10^{-4}\to3.19\cdot10^{-4}$ & $4.61\cdot10^{-4}\to4.61\cdot10^{-4}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+The errors change by at most 6\%. Aliasing of the rational conservative fluxes is
+therefore not the cause of the gap. This is consistent with A $\approx$ B$_p$:
+exactness of the $z$-integrals does not matter at these resolutions.
+
+\paragraph{Best-approximation errors.}
+To test the approximation explanation of item 4, we computed the $L^2$ projection
+error of the initial perturbation of each variable onto the $z$-basis, integrated
+over $\Omega_b\times(0,40)$.
+\begin{center}
+\resizebox{\textwidth}{!}{\begin{tabular}{@{}lcccccc@{}}
+\toprule
+$z$-basis & $\rho'$ & $u'_x$ & $u'_z$ & $E'$ & $(\rho u_x)'$ & $(\rho u_z)'$\\
+\midrule
+Laguerre $p_z=24$ & $2.8\cdot10^{-4}$ & $1.9\cdot10^{-5}$ & $1.8\cdot10^{-6}$ & $2.4\cdot10^{-3}$ & $1.1\cdot10^{-3}$ & $3.0\cdot10^{-4}$\\
+Laguerre $p_z=32$ & $3.6\cdot10^{-5}$ & $3.6\cdot10^{-7}$ & $3.6\cdot10^{-8}$ & $4.3\cdot10^{-4}$ & $2.1\cdot10^{-4}$ & $4.9\cdot10^{-5}$\\
+Laguerre $p_z=48$ & $1.7\cdot10^{-6}$ & $1.4\cdot10^{-10}$ & $2.4\cdot10^{-11}$ & $4.1\cdot10^{-5}$ & $1.3\cdot10^{-5}$ & $1.9\cdot10^{-6}$\\
+hybrid $N_z=16$ & $7.8\cdot10^{-5}$ & $1.6\cdot10^{-4}$ & $5.4\cdot10^{-5}$ & $5.6\cdot10^{-4}$ & $2.7\cdot10^{-4}$ & $8.0\cdot10^{-5}$\\
+hybrid $N_z=32$ & $4.8\cdot10^{-6}$ & $1.0\cdot10^{-5}$ & $3.4\cdot10^{-6}$ & $3.4\cdot10^{-5}$ & $1.6\cdot10^{-5}$ & $5.2\cdot10^{-6}$\\
+\bottomrule
+\end{tabular}}
+\end{center}
+In the Laguerre basis the velocity is approximated 50 to $10^5$ times better than
+the momentum, as predicted. The momentum error is of the order of the density
+error, because $m'\supset u_\infty\rho'$. In the hybrid basis the velocity is even
+slightly \emph{worse} than the momentum: $u'$ has amplitude $\approx1$ against
+$\approx0.5$ for $\rho'$, and with local polynomials the width only changes a
+constant. The simulation errors follow the same ordering. The remaining hybrid
+deficit of B$_p$ is plausibly also influenced by the collocated (inexact)
+$x$-integration of the $\rho$-weight, which we did not isolate.
+
+\paragraph{Stability.}
+The stability limit of the Courant number (vortex along $x$, $t=1$, B with the
+spectral-norm time-step estimate) is the same for both variable sets: between 2.5
+and 3 with the hybrid basis, and above 4 with pure Laguerre $p_z=48$. In the
+long-time vortex-along-$z$ runs ($t=6$), all eight configurations are stable in both
+formulations. These include two deliberately under-resolved ones (pure Laguerre
+$p_z=16$; hybrid $L_z=3$, $N_z=6$, tail $p_z=8$) in which the vortex rises into
+unresolved regions.
+
+\paragraph{Long-time damped vortex (B, $t=6$).}
+$\|\rho-\rho_\infty\|$ over $\Omega$, and the deviation from the undamped exact
+solution below the layer, $z<3$.
+\begin{center}
+\resizebox{\textwidth}{!}{\begin{tabular}{@{}lcccc@{}}
+\toprule
+& \multicolumn{2}{c}{$\|\rho-\rho_\infty\|$, damped, $t=3$ / $t=6$} &
+  \multicolumn{2}{c}{$z<3$ deviation, undamped, $t=6$}\\
+& B$_c$ & B$_p$ & B$_c$ & B$_p$\\
+\midrule
+Laguerre $p_z=48$ & 0.1744 / 0.03188 & 0.1744 / 0.03188 & $4.28\cdot10^{-3}$ & $4.24\cdot10^{-3}$\\
+hybrid $N_z=24$, tail $p_z=16$ & 0.1744 / 0.03187 & 0.1744 / 0.03187 & $2.55\cdot10^{-5}$ & $2.58\cdot10^{-5}$\\
+under-res.\ Laguerre $p_z=16$ & 0.1796 / 0.03580 & 0.1775 / 0.03663 & $1.41\cdot10^{-1}$ & $1.78\cdot10^{-1}$\\
+under-res.\ hybrid & 0.1755 / 0.03198 & 0.1751 / 0.03232 & $3.08\cdot10^{-2}$ & $2.80\cdot10^{-2}$\\
+\bottomrule
+\end{tabular}}
+\end{center}
+At resolved settings the damping results coincide to 3--4 digits. Run times for the
+undamped plus damped pair: Laguerre $p_z=48$ 179\,s (B$_c$) against 669\,s (B$_p$);
+hybrid 28.6\,s against 45.7\,s.
+
+\subsection{Conclusions on the variables}
+\begin{itemize}
+\item \textbf{Accuracy} is decided by approximation, not by integration. With a pure
+  Laguerre basis and nonzero far-field velocity, primitive variables are clearly
+  better: $1.5$--$2.1\times$ smaller error at equal $p_z$. With a local DG basis in $z$, conservative
+  variables are as good or better.
+\item \textbf{Cost}: primitive variables need a state-dependent mass solve every
+  stage, which makes them $2.6$--$3.9\times$ slower in the pure Laguerre case. At
+  equal accuracy B$_p$ with $p_z=32$ ($2.4\cdot10^{-4}$, 14.9\,s) is still slower than
+  B$_c$ with $p_z=48$ ($4.0\cdot10^{-5}$, 12.6\,s), which is more accurate.
+\item \textbf{Stability and robustness}: no difference was observed. Primitive
+  variables additionally require $\rho>0$ for the mass matrix.
+\item \textbf{Recommendation}: conservative variables as the default, especially
+  with the hybrid basis. Primitive variables are worthwhile only for a pure Laguerre
+  discretization where the number of modes, and hence memory, is the bottleneck, or
+  where exact integration (Proposition 2) is required.
+\end{itemize}
+
+%=====================================================================
+\section[Treatment of the z-direction: A vs. B]{Treatment of the $z$-direction:\\ \code{laguerre\_systems.cc} (A) vs.\ \code{laguerre\_systems\_2.cc} (B)}
+%=====================================================================
+
+\subsection{Theory}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+& \textbf{A: \code{laguerre\_systems.cc}} & \textbf{B: \code{laguerre\_systems\_2.cc}}\\
+\midrule
+$z$-basis & Global Laguerre functions $\Lag^\mu_j$, $j=0..p_z$, on $[0,\infty)$; no faces in $z$. &
+  $N_z$ intervals of $[0,L_z]$ with orthonormal Legendre polynomials of degree $p^b_z$
+  (DG in $z$), plus a tail $e^{-y}L_i(2y)$, $y=\mu(z-L_z)/2$; pure Laguerre if $N_z=0$.\\
+Resolution in $z$ & Node spacing $\sim\sqrt{z/(\mu p_z)}$, degrading with height;
+  one parameter pair $(\mu,p_z)$ for the whole column. &
+  Uniform $h/p$-refinable resolution on $[0,L_z]$; the tail only has to carry the
+  smooth decay to the far field.\\
+$z$-integrals & Exact (Proposition 2): polynomial fluxes in $w$ evaluated on graded
+  numbers; one Gauss--Laguerre rule per number $s=1..4$ of perturbation factors with
+  scaling $(s+1)\mu/2$ and $Q_s=\lceil(1+(s+1)p_z)/2\rceil$ points. $\int f\Lag_i'$
+  via the recurrence $\Lag_i'=-\frac\mu2\Lag_i-\mu\sum_{l<i}\Lag_l$. &
+  Pointwise quadrature: Gauss($p^b_z+2$) per interval, Gauss--Laguerre with
+  $2(p_z+1)+10$ points in the tail. Never exact for nonlinear fluxes. In the tail even
+  $\int\psi_i\psi_j$ is inexact: the integrand decays like $e^{-2y}$ but the rule
+  weight is $e^{-y}$ (Remark 6 of the notes). The analytic mass $1/\mu$ is used.\\
+Coupling in $z$ & Implicit in the global basis; $\partial_z$ through the recurrence. &
+  Upwind-type LLF fluxes at interval interfaces and at $z=L_z$ (column-local cell
+  kernel).\\
+$z=0$ boundary & Pointwise LLF with $\Lag_i(0)=1$; Dirichlet or slip wall. &
+  Same, on the trace of the first segment.\\
+Lateral faces ($x$) & Rusanov flux of the projected system: one $\lambda$ per
+  $x$-face point, the maximum over both sides and all $z$-nodes; exact integrals of
+  $F\cdot n$ and $\tilde a$. &
+  LLF evaluated pointwise at every $z$-point with local $\lambda(z)$, then
+  integrated. Less dissipative where wave speeds are small.\\
+Initial / boundary data & Projection with the rule of the notes in $y=\mu z/2$; the
+  notes' $Q=p_z+1$ limits the error to $\approx2\cdot10^{-3}$, so $p_z+41$ points are
+  used. Lateral Dirichlet data are projected onto the modes. &
+  $L^2$ projection with a finer rule; lateral Dirichlet data are evaluated
+  pointwise at the $z$-points.\\
+Source term & Gravity exact; $\Gamma(z)$ through precomputed matrices
+  $\int\Gamma\Lag_j\Lag_k$ plus a $\Gamma$-weighted $s=2$ rule for
+  $\rho'u'$; specialized to $\Gamma=\Gamma(z)$. &
+  Pointwise $b(U,x,z,t)$ at the quadrature points; any $\gamma(x,z,t)$ and $g$.\\
+Mass / time derivative & Primitive variables only; CG with collocated preconditioner. &
+  Conservative (diagonal) or primitive (direct collocated solve).\\
+Time step & $\mu\|C_z\|_2$ with $C_z(k,j)=\int\Lag_j\Lag_k'$; recomputed every 10 steps. &
+  Spectral norm of the 1D upwind DG/Laguerre operators per segment; recomputed every
+  10 steps.\\
+Code size & 2804 lines & 1895 lines\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{Consequences.}
+\begin{itemize}
+\item \emph{Accuracy.} With exact integration the scheme is a true Galerkin
+  projection in $z$: no aliasing, and the $z$-discretization of linearized
+  operators inherits the structure of the continuous one. B commits a quadrature
+  error. It converges spectrally in the number of points but, for rational fluxes,
+  never vanishes. The basis matters more than the integration: a global Laguerre
+  basis must resolve every structure at the height where it occurs, with a single
+  scaling $\mu$. The hybrid basis places resolution where it is needed and leaves the
+  far-field decay to the tail.
+\item \emph{Cost per step.} A evaluates the fluxes on about
+  $\sum_s Q_s\approx\frac72p_z$ nodes ($340$ at $p_z=48$), in truncated polynomial
+  arithmetic, on cells and twice on faces. It also needs the CG solve. B evaluates
+  each flux once per $z$-point (108 points at $p_z=48$).
+\item \emph{Stability.} A has no $z$-aliasing and a strongly dissipative lateral flux.
+  B relies on over-integration plus local LLF. In practice both were stable in all
+  tests, including under-resolved ones (see below).
+\item \emph{Flexibility.} A is tailored to the Euler equations and a $z$-dependent
+  sigmoidal $\Gamma$. Exactness requires polynomial fluxes and the specialized
+  matrices. B accepts any source and reaction $\gamma(x,z,t)$, and either set of
+  variables.
+\end{itemize}
+
+\subsection{Numerical comparison}
+
+\paragraph{Exactness checks of A.}
+The Proposition-2 rules reproduce $\mu\int\Lag_i\Lag_j=\delta_{ij}$ to
+$10^{-13}$. Enlarging any rule by 8 points changes the products of $s$ functions by at
+most $2.5\cdot10^{-13}$, for $p_z\le48$.
+
+The $z$-integrals of the source were compared with a brute-force composite
+Gauss--Legendre quadrature. Gravity is exact to $10^{-14}$. The reaction integrals,
+which cannot be exact because $\Gamma$ is not a polynomial, have relative errors
+$5.4\cdot10^{-6}$, $2.3\cdot10^{-6}$, $8.8\cdot10^{-8}$ and $3.0\cdot10^{-9}$ for
+$p_z=8,16,32,48$.
+
+\paragraph{Inexactness of B in the tail.}
+With the default rule of $2(p_z+1)+10$ points, the computed tail mass matrix
+$\int\psi_i\psi_j$ deviates from $\delta_{ij}/\mu$ by a relative
+$2.4\cdot10^{-6}$, $1.5\cdot10^{-5}$ and $6.7\cdot10^{-5}$ for $p_z=12,20,32$. The
+deviation grows with $p_z$ at fixed over-integration.
+
+\paragraph{Same problem, same metric (vortex along $x$, density error, $t=1$).}
+\begin{center}
+\resizebox{\textwidth}{!}{\begin{tabular}{@{}lccc@{}}
+\toprule
+& error & time & steps\\
+\midrule
+A, Laguerre $p_z=24$ / 32 / 48 & $8.51\cdot10^{-4}$ / $2.33\cdot10^{-4}$ / $2.61\cdot10^{-5}$ & 5.6 / 10.1 / 25.8\,s & 160 / 184 / 233\\
+B$_p$, Laguerre $p_z=24$ / 32 / 48 & $8.57\cdot10^{-4}$ / $2.41\cdot10^{-4}$ / $2.62\cdot10^{-5}$ & 6.7 / 14.9 / 49.1\,s & 358 / 424 / 560\\
+B$_c$, Laguerre $p_z=24$ / 32 / 48 & $1.49\cdot10^{-3}$ / $5.13\cdot10^{-4}$ / $4.00\cdot10^{-5}$ & 2.6 / 4.8 / 12.6\,s & 358 / 424 / 560\\
+B$_c$, hybrid $N_z=8$ / 16 / 32 & $2.93\cdot10^{-3}$ / $3.19\cdot10^{-4}$ / $7.71\cdot10^{-6}$ & 1.3 / 2.1 / 3.9\,s & 194 / 208 / 239\\
+\bottomrule
+\end{tabular}}
+\end{center}
+This table separates the three effects.
+\begin{enumerate}
+\item \emph{Exact vs.\ pointwise $z$-integration} (A vs.\ B$_p$: same variables,
+  same basis): no measurable accuracy difference, at most 4\%.
+\item \emph{Variables} (B$_p$ vs.\ B$_c$): a factor 1.5--2.1 in favor of primitive
+  variables with pure Laguerre (Section~2).
+\item \emph{Basis} (Laguerre vs.\ hybrid, B$_c$): the hybrid basis with $N_z=32$ is
+  $3.4\times$ more accurate than A's best run and $6.6\times$ faster.
+\end{enumerate}
+
+\paragraph{Cost per step} (80 cells, $p_z=48$, pure Laguerre): A 0.111\,s,
+B$_p$ 0.085\,s, B$_c$ 0.0225\,s. The step counts above are at B's default Courant
+number 1.5. B$_c$ remains stable at Courant 4 (210 steps, 4.9\,s, unchanged error).
+At its stability limit, B$_c$ with pure Laguerre is therefore about $5\times$
+faster than A for the same basis.
+
+\paragraph{Pitfall of the notes' projection rule (A).}
+With $Q=p_z+1$ points for the projection of initial and boundary data, the error
+stalls at about $2\cdot10^{-3}$ under both $p_z$- and $h$-refinement:
+$3.6\cdot10^{-3}$ at $p_z=48$, and $1.8\to2.1\cdot10^{-3}$ for 20$\to$80 cells at
+$p_z=64$. The nodes in $y=\mu z/2$ spread over twice the $z$-range of the basis and
+under-sample the data. With $p_z+41$ points the convergence is spectral in $p_z$
+($1.4\cdot10^{-2}\to2.6\cdot10^{-5}$ for $p_z=12\to48$). In $h$ the ratios are 9.9 and
+18.8, close to the expected 16, until the $p_z=64$ floor of about $10^{-5}$ is
+reached.
+
+\paragraph{Long-time damped vortex, A vs.\ B.}
+Density perturbation norms, Laguerre $p_z=48$, $\mu=10$.
+\begin{center}
+\resizebox{\textwidth}{!}{\begin{tabular}{@{}lccc@{}}
+\toprule
+& A & B$_c$ & B$_c$ hybrid ($N_z=24$)\\
+\midrule
+$\|\rho-\rho_\infty\|$, damped, $t=3$ & 0.1745 & 0.1744 & 0.1744\\
+$\|\rho-\rho_\infty\|$, damped, $t=6$ & 0.03187 & 0.03188 & 0.03187\\
+deviation in $z<3$, damped, $t=6$ & $2.626\cdot10^{-2}$ & $2.624\cdot10^{-2}$ & $2.625\cdot10^{-2}$\\
+deviation in $z<3$, undamped, $t=3$ / $t=6$ & $7.0\cdot10^{-4}$ / $3.3\cdot10^{-3}$ & $7.3\cdot10^{-4}$ / $4.3\cdot10^{-3}$ & $2.4\cdot10^{-5}$ / $2.6\cdot10^{-5}$\\
+time, undamped $+$ damped & 185\,s $+$ 168\,s & 95\,s $+$ 83\,s & 15\,s $+$ 13\,s\\
+\bottomrule
+\end{tabular}}
+\end{center}
+The two independent implementations agree to 3--4 digits on the damped dynamics,
+which cross-validates the source-term treatments. The damping layer reduces the
+density perturbation by a factor of 20 by $t=6$. It leaves a weak reflection of about
+$2.6\cdot10^{-2}$ below the layer, which travels upstream slowly
+($v-c\approx-0.18$). Without damping, the pure Laguerre bases lose accuracy as the
+vortex rises: the deviation in $z<3$ grows to about $4\cdot10^{-3}$, from waves
+radiated from the unresolved region. The hybrid basis keeps it at $2.6\cdot10^{-5}$.
+
+\subsection{Conclusions on the $z$-treatment}
+\begin{itemize}
+\item Exact $z$-integration (Proposition 2) is mathematically clean and was verified
+  to machine precision. At practical resolutions, however, it gives no accuracy
+  advantage over over-integrated pointwise quadrature with the same variables and
+  basis. Its costs are about $5\times$ per step, specialization to polynomial fluxes
+  and $z$-only reaction, and about 50\% more code.
+\item The choice of $z$-\emph{basis} dominates. A hybrid DG--Legendre $+$
+  Laguerre-tail basis gives uniform resolution where the dynamics happen and is more
+  accurate and much faster than any pure Laguerre configuration tested. A pure
+  Laguerre basis needs many modes at large $\mu$ to resolve structures at moderate
+  heights, and its resolution degrades with $z$.
+\item Both codes were stable in every test, including long, under-resolved runs; no
+  aliasing-driven instability was observed in B.
+\item \textbf{Recommendation}: \code{laguerre\_systems\_2.cc} with the hybrid basis
+  and conservative variables. Keep \code{laguerre\_systems.cc} as a reference
+  implementation of the notes and as a tool to measure quadrature errors.
+\end{itemize}
+
+\paragraph{Caveats.}
+All comparisons use one smooth problem family (isentropic vortices), $d=2$, a single
+core, and fixed $x$-resolution (80 $Q_3$ cells). Shocks, 3D runs, other
+far-field states and the role of $\mu$ were not studied. The Courant numbers of A and
+B are normalized differently and are not directly comparable; step counts are.
+
+\appendix
+\section{Reproduction}
+{\raggedright
+\begin{itemize}
+\item \code{laguerre\_systems [verify|convergence|damping|all] [n\_extra]}: logs in
+  \code{results\_systems/}.
+\item \code{laguerre\_systems\_2 [manufactured|cfl|vortex|damping|all]
+  [conservative|primitive]}: logs in \code{results\_systems\_2/}, primitive runs with
+  suffix \code{\_primitive}.
+\item The density-only errors of B, the refined-quadrature runs, the
+  best-approximation table and the tail mass-matrix check used small patched copies
+  and scripts. These are not part of the repository; the patches changed only the
+  error metric, the number of $z$-points and the driver.
+\end{itemize}
+
+\end{document}

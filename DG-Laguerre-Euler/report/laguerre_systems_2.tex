@@ -1,0 +1,316 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\usepackage{hyperref}
+\hypersetup{
+	colorlinks,
+	citecolor=green,
+	filecolor=black,
+	linkcolor=blue,
+	urlcolor=blue
+}
+\hypersetup{linktocpage}
+
+\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{amsbsy}
+\usepackage{latexsym}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{upgreek}
+\usepackage[usenames]{color}
+\usepackage{amsmath,amsthm}
+\usepackage{cleveref}
+\usepackage{enumerate}
+\usepackage{mathrsfs}
+\usepackage{stmaryrd}
+\usepackage{dsfont}
+\usepackage{varwidth}
+\usepackage{pdfpages}
+\usepackage{comment}
+
+\newcommand{\Rbb}{\mathbb{R}}
+\newcommand{\bw}{\mathbf{w}}
+\newcommand{\wt}{\widetilde{\mathbf{w}}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\bn}{\mathbf{n}}
+\newcommand{\bb}{\mathbf{b}}
+\newcommand{\bff}{\mathbf{f}}
+\newcommand{\bu}{\mathbf{u}}
+\newcommand{\ba}{\mathbf{a}}
+\newcommand{\mom}{\mathbf{m}}
+\newcommand{\bg}{\mathbf{g}}
+\newcommand{\be}{\mathbf{e}}
+\newcommand{\Fhat}{\widehat{F(\wt)\bn}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\setlength{\parindent}{1.5em}
+\setlength{\emergencystretch}{2em}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{remark}[theorem]{Remark}
+
+\begin{document}
+	
+	\subsection*{Setting}
+	
+	Consider systems of PDEs of the form
+	\begin{equation}\label{eq:pde}
+		\frac{\partial (M(\bw)\bw)}{\partial t} + \nabla\cdot F(\bw) = \bb(\bw,\bx,z,t), \qquad (\bx,z)\in\Omega=\Omega_b\times[0,\infty)\subset\Rbb^d,\quad t\in(0,T),
+	\end{equation}
+	where $\bw=\bw(\bx,z,t)=[w^1(\bx,z,t),\dots,w^c(\bx,z,t)]^\top\in\Rbb^c$ and $c$ denotes the number of components of the system. Here $\bb:\Rbb^c\times\Omega\times(0,T)\to\Rbb^c$ may explicitly depend on the spatial and temporal variables. Moreover, $F:\Rbb^c\to\Rbb^{c\times d}$, and we use the convention $\nabla\cdot A\in\Rbb^n$ for a matrix-valued function $A:\Rbb^m\to\Rbb^{n\times m}$, where $(\nabla\cdot A)_i:=\sum_j\partial A_{i,j}/\partial x_j$ (in other words, each entry of $\nabla\cdot A$ is the divergence of the corresponding row of $A$). The mass matrix $M(\bw)$ can be state-dependent.
+	
+	%The original notes allowed a state-dependent mass matrix, $\partial(M(\bw)\bw)/\partial t$. The implementation is restricted to $M=I$. With a state-dependent mass matrix, the coefficients of the discrete solution would enter the time-derivative term nonlinearly through $\int M(\wt)\wt\,\varphi_i$, and every Runge--Kutta stage would require a nonlinear solve. For the Euler equations the restriction costs nothing: in conservative variables $M=I$ (see below).
+	
+	The initial conditions are
+	\[
+	\bw(\bx,z,0)=\bw_0(\bx,z), \qquad (\bx,z)\in\Omega,
+	\]
+	and we impose far field conditions at infinity
+	\[
+	\lim_{z\to\infty}\bw(\bx,z,t)=\bw_\infty, \qquad \bx\in\Omega_b,\quad t\in(0,T),
+	\]
+	and boundary conditions on $\partial\Omega=\{\partial\Omega_b\times[0,\infty)\}\cup\{\Omega_b\times\{0\}\}$ (we assume that $\Omega_b\subset\Rbb^{d-1}$ is bounded). To distinguish between bounded and unbounded directions, we write $F(\bw)=[F_b(\bw)\;\bff(\bw)]$, where $F_b(\bw)\in\Rbb^{c\times(d-1)}$ and $\bff(\bw)\in\Rbb^c$. Then
+	\[
+	\nabla\cdot F(\bw) = \nabla_\bx\cdot F_b(\bw) + \frac{\partial \bff(\bw)}{\partial z},
+	\]
+	where $\nabla_\bx\cdot$ denotes the divergence with respect to $\bx$.
+	
+	\paragraph{Euler equations with reaction.} The motivating example is
+	\[
+	\left\{
+	\begin{aligned}
+		&\frac{\partial\rho}{\partial t}+\nabla\cdot(\rho\bu)+\gamma_1(\rho-\rho_\infty)=0\\[0.6em]
+		&\frac{\partial(\rho\bu)}{\partial t}+\nabla\cdot(\rho\bu\bu^\top+pI)+\bm{\gamma}_2\odot(\rho\bu-\rho_\infty\bu_\infty)=\rho\bg\\[0.6em]
+		&\frac{\partial E}{\partial t}+\nabla\cdot((E+p)\bu)+\gamma_3(E-E_\infty)=\rho\bu\cdot\bg
+	\end{aligned}
+	\right.,
+	\]
+	where $\odot$ denotes the Hadamard product of vectors and the reaction coefficient is $\bm{\gamma}=\bm{\gamma}(\bx,z,t)=[\gamma_1,\bm{\gamma}_2^\top,\gamma_3]^\top$. We include the reaction term with the final goal of implementing an absorbing layer. Using conservative variables, with momentum $\mom=\rho\bu$, gives the form \eqref{eq:pde} with $c=d+2$ and
+	\[
+	\bw=\begin{bmatrix}\rho\\ \mom\\ E\end{bmatrix},\quad M(\bw)=I,\quad
+	F(\bw)=\begin{bmatrix}\mom^\top\\ \dfrac{\mom\mom^\top}{\rho}+pI\\[0.6em] (E+p)\dfrac{\mom^\top}{\rho}\end{bmatrix},\quad
+	\bb(\bw,\bx,z,t)=\begin{bmatrix}-\gamma_1(\rho-\rho_\infty)\\ \rho\bg-\bm{\gamma}_2\odot(\mom-\mom_\infty)\\ \mom\cdot\bg-\gamma_3(E-E_\infty)\end{bmatrix},
+	\]
+	where $\mom_\infty=\rho_\infty\bu_\infty$ and $p=(\gamma_{\rm gas}-1)\left(E-\frac{\lVert\mom\rVert^2}{2\rho}\right)$. In this case
+	\[
+	\bff(\bw)=\big[m_d,\;m_dm_1/\rho,\;\dots,\;m_d^2/\rho+p,\;(E+p)m_d/\rho\big]^\top\in\Rbb^{d+2}.
+	\]
+	Alternatively, working with the primitive variables density, velocity and energy, we have
+	\[
+	\bw=\begin{bmatrix}\rho\\ \bu\\ E\end{bmatrix},\quad
+	F(\bw)=\begin{bmatrix}\rho\bu^\top\\ \rho\bu\bu^\top+pI\\[0.6em] (E+p)\bu^\top\end{bmatrix},\quad
+	\bb(\bw,\bx,z,t)=\begin{bmatrix}-\gamma_1(\rho-\rho_\infty)\\ \rho\bg-\bm{\gamma}_2\odot(\rho\bu-\rho_\infty\bu_\infty)\\ \rho\bu\cdot\bg-\gamma_3(E-E_\infty)\end{bmatrix},
+	\]
+	and $M(\bw)$ is the block-diagonal matrix with $1$, $\rho I\in\Rbb^{d\times d}$ and $1$ on the diagonal. Here $p=(\gamma_{\rm gas}-1)\left(E-\frac{\rho\lVert\bu\rVert^2}{2}\right)$ and
+	\[
+	\bff(\bw)=\big[\rho u_d,\;\rho u_du_1,\;\dots,\;\rho u_d^2+p,\;(E+p)u_d\big]^\top\in\Rbb^{d+2}.
+	\]
+	In conservative variables, the mass matrix is the identity and the nonlinear flux $F$ is a rational function, with velocity being computed from the momentum as $\mom/\rho$. With primitive variables, every flux is polynomial but the mass matrix is state-dependent: the coefficients of the discrete solution would enter the time-derivative term nonlinearly, and every Runge--Kutta stage would require a nonlinear solve.
+	
+	\begin{remark}
+		If $\bg\neq\mathbf{0}$, the constant far-field state is not a steady solution:
+		\[
+		\bb(\bw_\infty)=[0,\ \rho_\infty\bg^\top,\ \mom_\infty\cdot\bg]^\top\neq\mathbf{0},
+		\]
+		so a source that does not decay acts in the whole semi-infinite region. Physical computations with gravity therefore need a far field compatible with it. If we take $\bg$ constant, we need an hydrostatic background state $\bw_\infty(z)$ instead of a constant far field $\bw_\infty$.
+	\end{remark} 
+	
+	\paragraph{Boundary conditions.} All boundary conditions are imposed weakly through the numerical flux, by prescribing an exterior state $\bw^+=\bw_{\rm ext}(\bw^-)$ in terms of the interior trace $\bw^-$. As the choice of boundary conditions can be problem-dependent, we do not specify it here. The initial condition is imposed by $L^2$ projection of the initial perturbation $\bw_0-\bw_\infty$ onto the finite element space.
+	
+	
+	\subsection*{Grid}
+	
+	Consider a computational grid $\{\Omega_b^k\}_{k=1,\dots,N_\bx}$ on $\Omega_b$. $N_\bx$ is the number of elements (cells) in this grid. Since $\Omega_b\subset\Rbb^{d-1}$, the elements $\Omega_b^k$ are intervals if $d=2$ and quadrilaterals if $d=3$. For $L_z\ge0$, we consider the grid in $[0,\infty)$ defined by
+	\[
+	0=z_0<z_1<\dots<z_{N_z}=L_z, \qquad I_\ell:=[z_{\ell-1},z_\ell],\quad \ell=1,\dots,N_z.
+	\]
+	This allows us to define a computational grid on $\Omega$: define the set of cells $\mathcal{C}$ as
+	\[
+	\mathcal{C}=\left\{\Omega_b^k\times I_\ell: k=1,\dots,N_\bx,\ \ell=1,\dots,N_z\right\}\cup\left\{\Omega_b^k\times[L_z,\infty)\right\}.
+	\]
+	We allow $L_z=0$; in this case we set $N_z=0$ and the first set is empty.
+	
+	The set $\mathcal{F}$ of faces of the triangulation is the union of the boundaries of cells in $\mathcal{C}$. We can identify three different types of faces:
+	\begin{itemize}
+		\item $\partial\Omega_b^k\times I_\ell$, for $k=1,\dots,N_\bx$ and $\ell=1,\dots,N_z$. These are the ``vertical'' faces in the bounded region. They do not exist if $L_z=0$.
+		\item $\Omega_b^k\times\{z_\ell\}$, for $k=1,\dots,N_\bx$ and $\ell=0,\dots,N_z$. These are the ``horizontal'' faces. The choice $\ell=0$ corresponds to the lower boundary of $\Omega$, while $\ell=N_z$ is the interface between the bounded and unbounded region. If $L_z=0$, there are no interior ``horizontal'' faces, and the interface coincides with the lower boundary.
+		\item $\partial\Omega_b^k\times[L_z,\infty)$, for $k=1,\dots,N_\bx$. These are the ``vertical'' faces in the unbounded region.
+	\end{itemize}
+	
+	\paragraph{In the implementation} only the grid on $\Omega_b$ is created (a deal.ii Triangulation$<d-1>$). The cells in $\mathcal{C}$ and the faces in $\mathcal{F}$ are used for theoretical purposes but they are never constructed: they are implicit in the column formulation described below.
+	
+	
+	\subsection*{Finite element space}
+	
+	For $p\in\mathbb{N}_0$, we denote the space of univariate polynomials of degree $p$ by $\mathbb{P}_p$. For a vector $\mathbf{p}=(p_1,\dots,p_d)\in\mathbb{N}_0^d$ we define
+	\[
+	\mathbb{Q}_\mathbf{p}=\{r=r_1\otimes\dots\otimes r_d: r_i\in\mathbb{P}_{p_i}\ \forall i=1,\dots,d\}
+	\]
+	as the set of polynomials defined as tensor products of univariate polynomials. Finally, for $\mu>0$ and $L\ge0$, we define the space
+	\[
+	\widehat{\mathbb{P}}^{\mu,L}_p=\left\{f: f(z)=e^{-\mu(z-L)/2}p(z-L),\ \text{with } p\in\mathbb{P}_p\right\}\subset L^2((L,\infty)).
+	\]
+	With these definitions, we can define the finite element space: for $\mathbf{p}^b\in\mathbb{N}_0^{d-1}$, set
+	\begin{align*}
+		V^{N_\bx,N_z}_{\mu,\mathbf{p}^b,p^b_z,p_z}:=\Big\{\varphi\in L^2(\Omega):\ &\varphi\big|_{\Omega_b^k\times I_\ell}\in\mathbb{Q}_{\mathbf{p}^b}\times\mathbb{P}_{p_z^b}\quad\forall k=1,\dots,N_\bx,\ \ell=1,\dots,N_z,\\
+		&\varphi\big|_{\Omega_b^k\times[L_z,\infty)}\in\mathbb{Q}_{\mathbf{p}^b}\times\widehat{\mathbb{P}}^{\mu,L_z}_{p_z}\quad\forall k=1,\dots,N_\bx\Big\}.
+	\end{align*}
+	The polynomial degrees in the bounded region are $\mathbf{p}^b\cup\{p^b_z\}$, while $p_z$ is the polynomial degree for the $z$-direction in the unbounded region. The dimension of this space is
+	\[
+	\dim\big(V^{N_\bx,N_z}_{\mu,\mathbf{p}^b,p^b_z,p_z}\big)=N_\bx\,(N_z(p^b_z+1)+p_z+1)\prod_{i=1}^{d-1}(p_i^b+1).
+	\]
+	Notice that we allow different polynomial degrees in different directions.
+	
+	\paragraph{Basis.} We regard $i=(i_1,i_2)$ as a multi-index and choose
+	\begin{equation}\label{eq:basis}
+		\varphi_i(\bx,z)=\varphi^\bx_{i_1}(\bx)\,\varphi^z_{i_2}(z),
+	\end{equation}
+	where $\{\varphi^\bx_{i_1}\}_{i_1=1,\dots,N_\bx\prod_{i=1}^{d-1}(p_i^b+1)}$ is a basis of the discontinuous space $\mathbb{Q}_{\mathbf{p}^b}$ on the grid of $\Omega_b$. For example, we can choose $\varphi_{i_1}^\bx$ as tensor products of Legendre polynomials on each cell.
+	
+	There are $n_z:=N_z(p^b_z+1)+p_z+1$ basis functions in $z$. We group them by \emph{segment}: $S_\ell:=I_\ell$ for $\ell=1,\dots,N_z$ and $S_{N_z+1}:=[L_z,\infty)$. Every $\varphi^z_{i_2}$ is supported in a single segment, denoted by $S(i_2)$. Notice that $S(i_2)=S_\ell$ with
+	\begin{equation*}
+		\ell = \begin{cases}
+			1+\left\lfloor\frac{i_2}{p_z^b+1}\right\rfloor & 0\leq i_2 \leq N_z(p_z^b+1)-1 \\
+			N_z+1 & N_z(p_z^b+1)\leq i_2\leq n_z-1.
+		\end{cases}
+	\end{equation*}
+	 For $i_2=0,\dots,N_z(p^b_z+1)-1$, let $j(i_2) = i_2-(p_z^b+1)(\ell-1)$, with $S_\ell=S(i_2)$. Then
+	\[
+	\varphi^z_{i_2}(z)=
+	\begin{cases}
+		\phi_{j(i_2)}\!\left(\dfrac{z-z_{\ell-1}}{z_{\ell}-z_{\ell-1}}\right), &  i_2<N_z(p^b_z+1),\\[1em]
+		e^{-\mu(z-L_z)/2}L_{j(i_2)}(\mu(z-L_z)), & i_2\ge N_z(p^b_z+1),
+	\end{cases} \quad z\in S(i_2)
+	\]
+	and $\varphi^z_{i_2}=0$ outside $S(i_2)$. Here $L_j$ is the $j$th Laguerre polynomial, and we use orthonormal Legendre polynomials on the intervals,
+	\[
+	\phi_j(\xi)=\sqrt{2j+1}\,P_j(2\xi-1),\qquad j=0,\dots,p^b_z,
+	\]
+	with $P_j$ the $j$th Legendre polynomial. With these choices the $z$-basis is orthogonal:
+	\begin{equation}\label{eq:massz}
+		\int_0^\infty\varphi^z_i(z)\varphi^z_j(z)\,dz=m_j\,\delta_{i,j},\qquad
+		m_j=\begin{cases} z_\ell-z_{\ell-1}, & S(j)=I_\ell,\\ 1/\mu, & S(j)=[L_z,\infty).\end{cases}
+	\end{equation}
+	The traces needed at the ``horizontal'' faces are $\phi_i(0)=(-1)^i\sqrt{2i+1}$ and $\phi_i(1)=\sqrt{2i+1}$ on the intervals, and $\varphi^z_{i_2}(L_z^+)=L_i(0)=1$ for all Laguerre functions.
+	
+	Equation \eqref{eq:basis} means that the basis functions $\varphi_i$ are tensor products of $(d-1)$- and $1$-dimensional basis functions, $\bm{\varphi}(\bx,z)=\bm{\varphi}^z(z)\otimes\bm{\varphi}^\bx(\bx)$, where $\bm{\varphi}$, $\bm{\varphi}^z$ and $\bm{\varphi}^\bx$ are the vectors with components $\varphi_i$, $\varphi^z_{i_2}$ and $\varphi^\bx_{i_1}$; $i_1$ is the index running faster. The gradient of the $i$th basis function is
+	\begin{equation}\label{eq:grad}
+		\nabla\varphi_i(\bx,z)=\begin{bmatrix}\nabla_\bx\varphi^\bx_{i_1}(\bx)\,\varphi^z_{i_2}(z)\\ \varphi^\bx_{i_1}(\bx)\,\varphi^{z\prime}_{i_2}(z)\end{bmatrix},
+	\end{equation}
+	where $\nabla_\bx$ denotes the gradient with respect to $\bx$.
+	
+	
+	\subsection*{Weak formulation}
+	
+	For $i=1,\dots,c$, we approximate the perturbations $w^i(\bx,z,t)-w^i_\infty$ in the space $V^{N_\bx,N_z}_{\mu,\mathbf{p}^b,p^b_z,p_z}$, namely
+	\[
+	w^i(\bx,z,t)\approx \widetilde{w}^i(\bx,z,t):=w^i_\infty+\sum_j w_j^i(t)\varphi_j(\bx,z).
+	\]
+	This can be written compactly as 
+	\[
+	\bw(\bx,z,t)\approx\wt(\bx,z,t):=\bw_\infty+W(t)\bm{\varphi}(\bx,z),
+	\]
+	where $W(t)$ is the matrix containing the expansion coefficients $w^i_j(t)$. In this way, the far-field conditions at infinity are imposed strongly. To obtain the weak formulation, we multiply \eqref{eq:pde} by $\varphi_i$, integrate by parts over each cell $c\in\mathcal{C}$, apply a numerical flux on the faces and replace $\bw$ with its approximation $\wt$:
+	\begin{equation}\label{eq:weak}
+		\sum_{c\in\mathcal{C}}\int_c\frac{\partial M(\wt)\wt}{\partial t}\varphi_i+\sum_{f\in\mathcal{F}}\int_f\Fhat\,\varphi_i\big|_f-\sum_{c\in\mathcal{C}}\int_cF(\wt)\nabla\varphi_i=\sum_{c\in\mathcal{C}}\int_c\bb(\wt,\bx,z,t)\varphi_i,\qquad\forall i.
+	\end{equation}
+	Here $\bn$ is the unit normal vector to $f$. Since the cells are tensor products of a grid in $\Omega_b$ and (possibly unbounded) intervals, either $\bn=(\mathbf{0}^\top,\pm1)^\top$ at ``horizontal'' faces, or $\bn=(\bn_b(\bx)^\top,0)^\top$ at ``vertical'' faces, where $\bn_b(\bx)$ is the unit normal vector on $\partial\Omega_b^k$. We use the local Lax--Friedrichs flux
+	\begin{gather*}
+		\Fhat=\frac{F(\wt^-)+F(\wt^+)}{2}\bn+\frac{\lambda(\wt^-,\wt^+)}{2}(\wt^--\wt^+),\\
+		\lambda(\wt^-,\wt^+)=\max\left\{|\bu^-\cdot\bn|+c^-,\ |\bu^+\cdot\bn|+c^+\right\},
+	\end{gather*}
+	where $c=c(\wt)=\sqrt{\gamma_{\rm gas}p/\rho}$ is the speed of sound, the normal $\bn$ is oriented from the inner region ($-$) to the outer region ($+$), and $\wt^+=\bw_{\rm ext}(\wt^-)$ on boundary faces.
+	
+	The semi-discrete system is then
+	\begin{equation}\label{eq:semidiscrete}
+		\mathbf{s}(\dot{W})=\mathbf{r}(W,t),
+	\end{equation}
+	where
+	\begin{equation*}
+		s_i:=\sum_{c\in\mathcal{C}}\int_c\frac{\partial (M(\wt)\wt)}{\partial t}\varphi_i
+	\end{equation*}
+	and
+	\begin{equation*}
+		r_i:=\sum_{c\in\mathcal{C}}\int_c\Big(F(\wt)\nabla\varphi_i+\bb(\wt,\bx,z,t)\varphi_i\Big)-\sum_{f\in\mathcal{F}}\int_f\Fhat\,\varphi_i\big|_f.
+	\end{equation*}
+The left-hand side of \eqref{eq:semidiscrete} simplifies if $M=I$: since $\bw_\infty$ is constant we find $s_i=\big((\mathbf{M}_z\otimes\mathbf{M}_\bx)\,\dot{W}\big)_i$ (for each component), with the diagonal matrix $\mathbf{M}_z=\mathrm{diag}(m_0,\dots,m_{n_z-1})$ from \eqref{eq:massz} and the DG mass matrix $\mathbf{M}_\bx$ on $\Omega_b$, which is block-diagonal with one block per cell. If $M$ is state-dependent, $\mathbf{s}$ is instead a nonlinear function of $\dot{W}$.
+	
+	
+	\subsection*{Column formulation}
+	
+	Fix a cell $\Omega_b^k$. The cells of $\mathcal{C}$ above it form a \emph{column} $\Omega_b^k\times S_1,\dots,\Omega_b^k\times S_{N_z+1}$, and all terms of $\mathbf{r}$ are computed by loops over the cells and faces of the grid of $\Omega_b$, with the integrals in $z$ inside. Below, the dependency of $\wt$ on $\bx$, $z$ and $t$ is omitted.
+	
+	\paragraph{Cell terms.} Let $i=(i_1,j)$. Since $\varphi^z_j$ is supported in $S(j)$, using \eqref{eq:basis}--\eqref{eq:grad} and $F=[F_b\ \bff]$,
+	\[
+	\int_{\Omega_b^k}\int_{S(j)}\frac{\partial (M(\wt)\wt)}{\partial t}\varphi_i\,dz\,d\bx = \int_{\Omega_b^k} \frac{\partial \ba_j(\bx,t)}{\partial t}\varphi_{i_1}^\bx(\bx)\,d\bx
+	\]
+	and
+	\[
+	\int_{\Omega_b^k}\int_{S(j)}\Big(F(\wt)\nabla\varphi_i+\bb\,\varphi_i\Big)\,dz\,d\bx
+	=\int_{\Omega_b^k}\Big(B_j(\bx,t)\,\nabla_\bx\varphi^\bx_{i_1}(\bx)+\mathbf{h}_j(\bx,t)\,\varphi^\bx_{i_1}(\bx)\Big)\,d\bx,
+	\]
+	with
+	\begin{align}
+		\begin{split}\label{eq:aBh}
+		\ba_j(\bx,t)&:=\int_{S(j)}M(\wt)\wt\,\varphi^z_j(z)\,dz, \qquad
+		B_j(\bx,t):=\int_{S(j)}F_b(\wt)\,\varphi^z_j(z)\,dz,\\
+		\mathbf{h}_j(\bx,t)&:=\int_{S(j)}\Big(\bb(\wt,\bx,z,t)\,\varphi^z_j(z)+\bff(\wt)\,\varphi^{z\prime}_j(z)\Big)\,dz.
+		\end{split}
+	\end{align}
+	
+	\paragraph{``Horizontal'' faces.} The faces $\Omega_b^k\times\{z_\ell\}$, $\ell=0,\dots,N_z$, lie inside the column, so their contribution is again an integral over $\Omega_b^k$. With $\bn=\be_d=(0,0,\dots,+1)\in\Rbb^d$, define the traces
+	\[
+	\wt^+_\ell:=\wt(\cdot,z_\ell^+),\quad \ell=0,\dots,N_z,\qquad
+	\wt^-_\ell:=\wt(\cdot,z_\ell^-),\quad \ell=1,\dots,N_z,\qquad
+	\wt^-_0:=\bw_{\rm ext}(\wt^+_0),
+	\]
+	and the fluxes $\widehat{\bff}_\ell:=\widehat{F}(\wt^-_\ell,\wt^+_\ell)\,\be_d$. At the bottom, the exterior state is placed on the $-$ side; since the Lax--Friedrichs flux satisfies $\widehat{F}(\mathbf{a},\mathbf{b})(-\bn)=-\widehat{F}(\mathbf{b},\mathbf{a})\bn$, this is the same as using the outward normal $-\be_d$. For a mode $j$ with $S(j)=S_{\ell+1}$, the face below its segment is $z_\ell$ and the face above is $z_{\ell+1}$ (absent for the tail), so the ``horizontal'' faces contribute
+	\begin{equation}\label{eq:H}
+		\int_{\Omega_b^k}\mathbf{H}_j(\bx,t)\,\varphi^\bx_{i_1}\,d\bx,\qquad
+		\mathbf{H}_j:=\widehat{\bff}_\ell\,\varphi^z_j(z_\ell^+)-\begin{cases}\widehat{\bff}_{\ell+1}\,\varphi^z_j(z_{\ell+1}^-), & \ell<N_z,\\ 0, & \ell=N_z.\end{cases}
+	\end{equation}
+	At the interface $z_{N_z}=L_z$, $\varphi^z_j(L_z^+)=1$ for all Laguerre functions. The tail has no upper face because $\varphi^z_j\to0$ as $z\to\infty$.
+	
+	\paragraph{``Vertical'' faces.} For a face $e$ of the grid of $\Omega_b$ and the corresponding faces $e\times S_\ell$ in $\mathcal{F}$, the flux integrated over the whole $z$-direction is
+	\begin{equation}\label{eq:G}
+		\mathbf{G}_j(\bx,t):=\int_{S(j)}\left(\frac{F_b(\wt^-)+F_b(\wt^+)}{2}\bn_b+\frac{\lambda(\wt^-,\wt^+)}{2}(\wt^--\wt^+)\right)\varphi^z_j(z)\,dz,
+	\end{equation}
+	On interior faces, $\wt^\pm$ are the traces from the two neighbouring cells of $\Omega_b$; on boundary faces, $\wt^+=\bw_{\rm ext}(\wt^-)$.
+	
+	\paragraph{Total left-hand side and residual.} Collecting all terms,
+	\begin{align}
+		\begin{split}\label{eq:s_and_r}
+		s_{(i_1,j)}&=\sum_{k=1}^{N_\bx}\int_{\Omega_b^k} \frac{\partial \ba_j(\bx,t)}{\partial t}\varphi_{i_1}^\bx(\bx)\,d\bx \\
+		r_{(i_1,j)}&=\sum_{k=1}^{N_\bx}\int_{\Omega_b^k}\Big(B_j\,\nabla_\bx\varphi^\bx_{i_1}+(\mathbf{h}_j+\mathbf{H}_j)\,\varphi^\bx_{i_1}\Big)\,d\bx-\sum_{k=1}^{N_\bx}\int_{\partial\Omega_b^k}\mathbf{G}^k_j\,\varphi^\bx_{i_1}\big|_{\Omega_b^k}\,ds,
+		\end{split}
+	\end{align}
+	where $\mathbf{G}^k_j$ is computed with $\wt^-$ the trace from $\Omega_b^k$ and $\bn_b$ the outward normal of $\Omega_b^k$. Every term in \eqref{eq:s_and_r} is an integral over a cell or face of the $(d-1)$-dimensional grid. Consequently, no $d$-dimensional grid is needed, neither in the tail nor in the bounded region, and the case $L_z=0$ ($N_z=0$) needs no special treatment.
+	
+	
+	\subsection*{Numerical quadrature}
+	
+	\paragraph{In $\Omega_b$.} To compute the integrals in \eqref{eq:s_and_r}, we use the tensor-product Gauss rule with $p_i^b+2$ points per direction (over-integration, as in deal.II's step-67), for $i=1,\dots,d-1$.
+	
+	\paragraph{On the intervals.} The integrals over $I_\ell$ in \eqref{eq:aBh} and \eqref{eq:G} use the Gauss rule with $p^b_z+2$ points.
+	
+	\paragraph{On $[L_z,\infty)$.} From \eqref{eq:aBh} and \eqref{eq:G}, one has to compute integrals of the form
+	\[
+	\int_{L_z}^\infty g(\wt(\bx,z,t),\bx,z,t)\,\varphi^z_i(z)\,dz\quad\text{and}\quad\int_{L_z}^\infty g(\wt(\bx,z,t),\bx,z,t)\,\varphi^{z\prime}_i(z)\,dz,
+	\]
+	where $g$ is a given vector- or matrix-valued function. Using the change of variable $\mu(z-L_z)/2=y$ and expanding the definition of $\wt$ and $\varphi^z_i$, the first integral can be written as
+	\[
+	\frac{2}{\mu}\int_0^\infty g\Big(\bw_\infty+e^{-y}W^u(t)(\bm{\ell}(2y)\otimes\bm{\varphi}^\bx(\bx)),\bx,L_z+\frac{2y}{\mu},t\Big)e^{-y}L_i(2y)\,dy,
+	\]
+	where $W^u$ contains the coefficients of the Laguerre modes and $\bm{\ell}(2y)$ is the vector with components $L_i(2y)$, $i=0,\dots,p_z$. Let $\{z_q,\omega_q\}_{q=1,\dots,Q}$ be the nodes and weights of the Gauss-Laguerre rule with $Q$ points. The integral is approximated by
+	\[
+	\frac{2}{\mu}\sum_{q=1}^Qg\Big(\bw_\infty+e^{-z_q}W^u(t)(\bm{\ell}(2z_q)\otimes\bm{\varphi}^\bx(\bx)),\bx,L_z+\frac{2z_q}{\mu},t\Big)L_i(2z_q)\,\omega_q.
+	\]
+	Since $\varphi^{z\prime}_i(z)=\frac{\mu}{2}e^{-y}\big(2L_i^\prime(2y)-L_i(2y)\big)$, the second integral is approximated in the same way with $L_i(2z_q)$ replaced by $\frac{\mu}{2}\big(2L_i^\prime(2z_q)-L_i(2z_q)\big)$.
+	
+\end{document}

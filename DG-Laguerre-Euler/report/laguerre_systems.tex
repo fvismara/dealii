@@ -1,0 +1,307 @@
+\documentclass{article}
+\usepackage[top=2.2cm,left=2.8cm,right=2.8cm,bottom=2.8cm]{geometry}
+
+\usepackage{hyperref}
+\hypersetup{
+	colorlinks,
+	citecolor=green,
+	filecolor=black,
+	linkcolor=blue,
+	urlcolor=blue
+}
+\hypersetup{linktocpage}
+
+\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{amsbsy}
+\usepackage{latexsym}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{upgreek}
+\usepackage[usenames]{color}
+\usepackage{amsmath,amsthm}
+\usepackage{cleveref}
+\usepackage{enumerate}
+\usepackage{mathrsfs}
+\usepackage{stmaryrd}
+\usepackage{dsfont}
+\usepackage{varwidth}
+\usepackage{pdfpages}
+\usepackage{comment}
+
+\newcommand{\Rbb}{\mathbb{R}}
+\newcommand{\ubf}{\mathbf{u}}
+\newcommand{\gbf}{\mathbf{g}}
+\newcommand{\wbf}{\mathbf{w}}
+\newcommand{\bbf}{\mathbf{b}}
+\newcommand{\hbf}{\mathbf{h}}
+\newcommand{\nbf}{\mathbf{n}}
+\newcommand{\qbf}{\mathbf{q}}
+\newcommand{\xbf}{\mathbf{x}}
+\newcommand{\abf}{\mathbf{a}}
+\newcommand{\fbf}{\mathbf{f}}
+\newcommand{\atbf}{\widetilde{\mathbf{a}}}
+\newcommand{\Btbf}{\widetilde{B}}
+\newcommand{\absigma}{\lvert\sigma\rvert}
+\newcommand{\htbf}{\widetilde{\mathbf{h}}}
+\newcommand{\wtbf}{\widetilde{\mathbf{w}}}
+\newcommand{\phibf}{\boldsymbol{\varphi}}
+\newcommand{\gambf}{\boldsymbol{\gamma}}
+\newcommand{\zebf}{\mathbf{0}}
+\newcommand{\cLh}{\hat{\mathscr{L}}}
+\newcommand{\cLhp}{\hat{\mathscr{L}}^\prime}
+\providecommand{\norm}[1]{\lVert#1\rVert}
+
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{remark}[theorem]{Remark}
+
+\begin{document}
+	Consider the general system of PDEs of the form
+	\begin{equation}\label{system}
+		\frac{\partial(M(\wbf)\wbf)}{\partial t}+\nabla\cdot F(\wbf)=\bbf(\wbf,\xbf,z,t), \qquad (\xbf,z)\in\Omega=\Omega_b\times[0,\infty)\subset\Rbb^d,\quad t\in(0,T),
+	\end{equation}
+	where $\wbf=\wbf(\xbf,z,t)=[w^1(\xbf,z,t),\dots,w^c(\xbf,z,t)]^\top\in\Rbb^c$ and $c$ denotes the number of components of the system. Here $M:\Rbb^c\to\Rbb^{c\times c}$ denotes a possibly state-dependent mass matrix, while $\bbf:\Rbb^c\times\Omega\times(0,T)\to\Rbb^c$ may explicitly depend on the spatial and temporal variables. Moreover, $F:\Rbb^c\to\Rbb^{c\times d}$, and we use the convention $\nabla\cdot A\in\Rbb^n$ for a matrix-valued function $A:\Rbb^m\to\Rbb^{n\times m}$, where $(\nabla\cdot A)_i := \sum_j\partial A_{i,j}/\partial x_j$ (in other words, each entry of $\nabla\cdot A$ is the divergence of the corresponding row of $A$). 
+	
+	The initial conditions are
+	\begin{equation*}
+		\wbf(\xbf,z,0) = \wbf_0(\xbf,z),
+	\end{equation*}
+	and we impose far field conditions at infinity
+	\begin{equation*}
+		\lim_{z\to\infty}\wbf(\xbf,z,t) = \wbf_\infty
+	\end{equation*}
+	and suitable boundary conditions on $\partial\Omega=\{\partial\Omega_b\times[0,\infty)\}\cup\{\Omega_b\times\{0\}\}$ (we assume that $\Omega_b\subset\Rbb^{d-1}$ is bounded). To distinguish between bounded and unbounded directions, we write $F(\wbf)=[F_b(\wbf)\,\,\fbf(\wbf)]$, where $F_b(\wbf)\in\Rbb^{c\times(d-1)}$ and $\fbf(\wbf)\in\Rbb^c$. Then we can write
+	\begin{equation*}
+		\nabla\cdot F(\wbf) = \begin{bmatrix}
+			\nabla_\xbf\cdot F_b(\wbf) & \displaystyle\frac{\partial \fbf(\wbf)}{\partial z}
+		\end{bmatrix},
+	\end{equation*}
+	where $\nabla_\xbf\cdot$ denotes the divergence with respect to $\xbf$. 
+	
+	As a motivating example, we consider the Euler's equations with reaction
+	\begin{equation*}
+		\begin{cases}
+			&\displaystyle\frac{\partial\rho}{\partial t} + \nabla\cdot(\rho\ubf) +\gamma_1(\rho-\rho_\infty) = 0 \\
+			&\displaystyle\frac{\partial(\rho\ubf)}{\partial t} + \nabla\cdot(\rho\ubf\ubf^\top+pI)+\boldsymbol{\gamma}_2\odot(\rho\ubf-\rho_\infty\ubf_\infty)=\rho\gbf \\
+			&\displaystyle\frac{\partial E}{\partial t}+\nabla\cdot((E+p)\ubf)+\gamma_3(E-E_\infty)=\rho\ubf\cdot\gbf
+		\end{cases},
+	\end{equation*}
+	where $\odot$ denotes the Hadamard product of vectors and the space- and time-dependent reaction coefficient is $\gambf=\gambf(\xbf,z,t)=[\gamma_1(\xbf,z,t),\gambf_2(\xbf,z,t)^\top,\gamma_3(\xbf,z,t)]^\top$. This can be recast into the form \eqref{system} by setting $c=d+2$ and
+	\begin{equation*}
+		\wbf=\begin{bmatrix}
+			\rho \\ \ubf \\ E
+		\end{bmatrix}, \quad M(\wbf)=\begin{bmatrix}
+			1 & \zebf_d^\top & 0 \\
+			\zebf_d & \rho I & \zebf_d \\
+			0 & \zebf_d^\top & 1
+		\end{bmatrix}, \quad F(\wbf)=\begin{bmatrix}
+			\rho\ubf^\top \\ \rho\ubf\ubf^\top+pI \\ (E+p)\ubf^\top
+		\end{bmatrix} ,\quad \bbf(\wbf) = \begin{bmatrix}
+			-\gamma_1(\rho-\rho_\infty) \\ \rho\gbf-\boldsymbol{\gamma}_2\odot(\rho\ubf-\rho_\infty\ubf_\infty) \\ \rho\ubf\cdot\gbf - \gamma_3(E-E_\infty)
+		\end{bmatrix},
+	\end{equation*}
+	where $p=(\gamma_{\mathrm{gas}}-1)\left(E-\frac12\rho \norm{\ubf}^2\right)$.
+	In this case, $\fbf(\wbf)=[\rho u_d, \,\rho u_du_1,\, \dots \rho u_d^2 + p,\, (E+p)u_d]^\top\in\Rbb^{d+2}$.
+	
+	For each $i=1,\dots,c$, we consider the approximation
+	\begin{equation}\label{approx_general}
+		w^i(\xbf,z,t) \approx w^i_\infty +\sum_{j=0}^{p_z}w_j^i(\xbf,t)\cLh_j^\mu(z), \qquad i=1,\dots,c,
+	\end{equation}
+	where
+	\begin{equation*}
+		\cLh_j^\mu(z) := e^{-\mu z/2}L_j(\mu z), \qquad j\in\mathbb{N}_0, \quad \mu>0,
+	\end{equation*}
+	$L_j$ being the $j$th Laguerre polynomial. The scaling factor $\mu$ allows to represent arbitrary portions of the half-line $[0,\infty)$. Notice that here the same scaling $\mu$ is chosen for the approximation of all components $w^i$. 
+	
+	We collect the coefficients $w_j^i$, for $i=1,\dots,c$ and $j=0,\dots,p_z$, in the vector
+	\begin{equation*}
+		\wtbf(\xbf,t) = [w_0^1(\xbf,t),\dots,w_{0}^c(\xbf,t),w_1^1(\xbf,t),\dots,w_{1}^c(\xbf,t),\dots,w_{p_z}^1(\xbf,t),\dots,w_{p_z}^c(\xbf,t)]^\top\in\Rbb^{(p_z+1)c}.
+	\end{equation*}
+	We obtain the initial condition by imposing that the approximation \eqref{approx_general} of the perturbation $w^i(\xbf,z,t)-w^i_\infty$ at the initial time is the projection (in the $L^2$-norm) of the exact initial perturbation $w^i(\xbf,z,0)-w^i_\infty$ onto the span of the Laguerre basis functions ($w^i(\xbf,z,0)$ is given by the initial condition): in particular
+	\begin{equation*}
+		\sum_{j=0}^{p_z}w_j^i(\xbf,t)\int_0^\infty\cLh_j^\mu(z)\cLh_k^\mu(z)\,dz = \int_0^\infty \left[w^i(\xbf,z,0)-w^i_\infty\right]\cLh_k^\mu(z)\,dz, \qquad \forall i=1,\dots,c.
+	\end{equation*}
+	Using the orthogonality properties of the Laguerre functions, we obtain
+	\begin{equation}\label{initial_cond_reduced}
+		w_k^i(\xbf,0) = \mu\int_0^\infty \left[w^i(\xbf,z,0)-w^i_\infty\right]\cLh_k^\mu(z)\,dz, \qquad \forall i=1,\dots,c,\quad k=0,\dots,p_z,
+	\end{equation}
+	which yields $\wtbf_0(\xbf):=\wtbf(\xbf,0)$.
+	
+	We then insert \eqref{approx_general} into \eqref{system} and project onto the span of the Laguerre functions $\cLh_j^\mu$, for $j=0,\dots,p_z$, integrating by parts in $(0,\infty)$. We obtain
+	\begin{equation}\label{system_after_ibp}
+		\frac{\partial}{\partial t}\int_0^\infty(M(\wbf)\wbf)\,\cLh_j^\mu + \nabla_\xbf\cdot\int_0^\infty F_b(\wbf)\,\cLh_j^\mu=\widehat\fbf_0+\int_0^\infty \left(\fbf(\wbf)\cLh_j^{\mu\prime}+\bbf(\wbf)\,\cLh_j^\mu\right), \quad \forall j=0,\dots,p_z,
+	\end{equation}
+	where $\widehat{\fbf}_0$ is a suitable numerical flux that replaces $\fbf(\wbf(\xbf,0,t))$ and that incorporates the boundary conditions at $z=0$ (i.e., on the portion of the boundary $\Omega_b\times\{0\}$).
+	
+	For $j=0,\dots,p_z$, define
+	\begin{align}
+		\begin{split}\label{a_B_h}
+			\abf(\wtbf(\xbf,t))_j&:=\int_0^\infty(M(\wbf(\xbf,z,t))\wbf(\xbf,z,t))\,\cLh_j^\mu(z)\,dz\in\Rbb^c, \\
+			B(\wtbf(\xbf,t))_j&:=\int_0^\infty F_b(\wbf(\xbf,z,t))\,\cLh_j^\mu(z)\,dz\in\Rbb^{c\times (d-1)}, \\
+			\hbf(\wtbf(\xbf,t),\xbf,t)_j &:=\widehat\fbf_0(\xbf,t)+\int_0^\infty \left[\fbf(\wbf(\xbf,z,t))\cLh_j^{\mu\prime}(z)+\bbf(\wbf(\xbf,z,t),\xbf,z,t)\,\cLh_j^\mu(z)\right]\,dz\in\Rbb^c.
+		\end{split}
+	\end{align}
+	Moreover, set
+	\begin{align*}
+		\atbf(\wtbf(\xbf,t)):=\begin{bmatrix}
+			\abf(\wtbf(\xbf,t))_0 \\ \vdots \\ \abf(\wtbf(\xbf,t))_{p_z}
+		\end{bmatrix}\in\Rbb^{(p_z+1)\times c},& \qquad \Btbf(\wtbf(\xbf,t)):=\begin{bmatrix}
+			B(\wtbf(\xbf,t))_0 \\ \vdots \\ B(\wtbf(\xbf,t))_{p_z}
+		\end{bmatrix}\in\Rbb^{(p_z+1)c\times (d-1)}, \qquad \\ \htbf(\wtbf(\xbf,t),\xbf,t)&:=\begin{bmatrix}
+			\hbf(\wtbf(\xbf,t),\xbf,t)_0 \\ \vdots \\ \hbf(\wtbf(\xbf,t),\xbf,t)_{p_z}
+		\end{bmatrix}\in\Rbb^{(p_z+1)\times c}.
+	\end{align*}
+	Then we can write \eqref{system_after_ibp} compactly as
+	\begin{equation}\label{system_reduced}
+		\frac{\partial}{\partial t}\atbf(\wtbf(\xbf,t)) + \nabla_\xbf\cdot \Btbf(\wtbf(\xbf,t)) = \htbf(\wtbf(\xbf,t),\xbf,t), \qquad \xbf\in\Omega_b,\quad t\in(0,T),
+	\end{equation}
+	with initial condition $\wtbf(\xbf,0)=\wtbf_0(\xbf)$ from \eqref{initial_cond_reduced} and boundary conditions on $\partial\Omega_b$. This is a system of the same form as \eqref{system}. The dimension of the spatial domain is now $d-1$ instead of $d$, while the number of components has increased from $c$ to $(p_z+1)c$. 
+	
+	The idea is now to solve \eqref{system_reduced} using a standard matrix-free DG discretization in $\Omega_b$.
+	
+	\subsection*{Numerical computation of integrals}
+	\subsubsection*{The general case}
+	While solving \eqref{system_reduced}, one has to repeatedly evaluate the maps $\atbf$, $\Btbf$ and $\htbf$, which in turn require to compute the integrals in \eqref{a_B_h}. For general $M$, $F$ and $\bbf$ in \eqref{system}, this can only be done via numerical quadrature. In particular, the following holds:
+	\begin{proposition}\label{prop:int_general}
+		Let $f=f(\xbf,z,t)\in\Rbb^{m\times n}$, with $m,n\geq 1$, and let $z\mapsto f(\xbf,z,t)$ be a polynomial of degree $p$ for any fixed $\xbf,t$. Let $\{z_q,\omega_q\}_{q=1,\dots,Q}$ be nodes and weights of a Gauss-Laguerre or Gauss-Laguerre-Radau quadrature rule with $Q$ points. Then
+		\begin{align*}
+			\int_0^\infty f(\xbf,z,t)\cLh_j^\mu(z)\,dz &= \frac{2}{\mu}\sum_{q=1}^Qf\left(\xbf,\frac{2z_q}{\mu},t\right)L_j(2z_q)\omega_q, \\
+			\int_0^\infty f(\xbf,z,t)\cLh_j^{\mu\prime}(z)\,dz &=  -\sum_{q=1}^Qf\left(\xbf,\frac{2z_q}{\mu},t\right)\left(L_j(2z_q)+2\sum_{k=0}^{j-1}L_k(2z_q)\right)\omega_q,
+		\end{align*}
+		whenever $2Q-1-\delta\geq p+j$, where $\delta=0$ for Gauss-Laguerre and $\delta=1$ for Gauss-Laguerre-Radau.
+	\end{proposition}
+	\begin{proof}
+		Using the definition of Laguerre functions and performing the change of variable $y=\mu z/2$ yields
+		\begin{equation*}
+			\int_0^\infty f(\xbf,z,t)\cLh_j^\mu(z)\,dz = \int_0^\infty f(\xbf,z,t)e^{-\mu z/2}L_j(\mu z)\,dz = \frac{2}{\mu}\int_0^\infty e^{-y} f\left(\xbf,\frac{2y}{\mu},t\right)L_j(2y)\,dy.
+		\end{equation*}
+		By hypothesis, the map $y\mapsto f\left(\xbf,2y/\mu,t\right)L_j(2y)$ is a polynomial of degree $p+j$. Therefore, Gauss-Laguerre(-Radau) quadrature is exact as long as $2Q-1-\delta\geq p+j$. To prove the second statement, we recall that, thanks to the property of Laguerre functions, we have
+		\begin{equation*}
+			\cLh_i^{\mu\prime}(z) = -\frac{\mu}{2}\cLh_i^\mu(z)-\mu\sum_{\ell=0}^{i-1}\cLh_\ell^\mu(z),
+		\end{equation*}
+		so we can write
+		\begin{equation*}
+			\int_0^\infty f(\xbf,z,t)\cLh_j^{\mu\prime}(z)\,dz = -\frac{\mu}{2}\int_0^\infty f(\xbf,z,t)\cLh_j^\mu(z)\,dz-\mu\sum_{k=0}^{j-1}\int_0^\infty f(\xbf,z,t)\cLh_k^\mu(z)\,dz
+		\end{equation*}
+		and apply the previous statement.
+	\end{proof}
+	In order to apply this result to \eqref{a_B_h}, we need to consider the maps $z\mapsto M(\wbf(\xbf,z,t))\wbf(\xbf,z,t)$, $z\mapsto F_b(\wbf(\xbf,z,t))$, $z\mapsto \fbf(\wbf(\xbf,z,t))$ and $z\mapsto \bbf(\wbf(\xbf,z,t),\xbf,z,t)$. In general, none of these maps are polynomial, and therefore one always incurs some non-zero quadrature error. The idea is then to choose $Q$ large enough to make the quadrature error sufficiently small. However, one can exploit the expressions of $M$ and $F$ and $\bbf$, and improve this result by specializing it to the particular system we are considering. We do this in the particular case of the Euler's equations.
+	
+	\subsubsection*{The Euler's equation}
+	We will need the following result.
+	\begin{proposition}\label{prop:integral_euler}
+		For $k=1,\dots,N$, define $\overline{w}^{i_k}(z):=w^{i_k}_\infty+\sum_{j=0}^{p_z}w_j^{i_k}\cLh_j^\mu(z)$. For every subset $\sigma\subseteq\{1,\dots,N\}$, set $s:=\lvert\sigma\rvert\in\{0,\dots,N\}$, define
+		\begin{equation*}
+			Q_{s} :=\left\lceil\frac{1+\delta+(s+1)p_z}{2}\right\rceil
+		\end{equation*}
+		and let $\{z_q^{(s)},\omega_q^{(s)}\}_{q=1,\dots,Q_{s}}$ be the nodes and weights of a Gauss-Laguerre(-Radau) quadrature rule with $Q_{s}$ points, where $\delta=0$ for Gauss-Laguerre and $\delta=1$ for Gauss-Laguerre-Radau. For $s=0,\dots,N$, define the matrices $P^{(s)}\in\Rbb^{(p_z+1)\times Q_{s}}$ such that
+		\begin{equation*}
+			P^{(s)}_{j,q}=L_{j}\left(\frac{2z_q^{(s)}}{1+s}\right), \quad j=0,\dots,p_z, \quad q=1,\dots,Q_{s},
+		\end{equation*}
+		and set
+		\begin{equation*}
+			\widehat{\omega}_q^{(s)} := \frac{2\omega_q^{(s)}}{\mu(s+1)}, \qquad q=1,\dots,Q_{s}.
+		\end{equation*}
+		Then
+		\begin{equation}\label{integral_L}
+			\int_0^\infty\left(\prod_{k=1}^N\overline{w}^{i_k}(z)\right)\cLh_i^\mu(z)\,dz=\sum_{\sigma\subseteq\{1,\dots,N\}}\left(\prod_{\ell\notin\sigma}w_\infty^{i_\ell}\right)\sum_{q=1}^{Q_{s}}\prod_{\ell\in\sigma}\left(\sum_{j=0}^{p_z}w_j^{i_\ell}P^{(s)}_{j,q}\right)P^{(s)}_{i,q}\widehat\omega_q^{(s)}.
+		\end{equation}
+	\end{proposition}
+\begin{proof}
+	We use the identity $\prod_{k=1}^N(a_k+b_k)=\sum_{\sigma\subseteq\{1,\dots,N\}}(\prod_{\ell\notin\sigma}a_\ell)(\prod_{\ell\in\sigma}b_\ell)$. Hence
+	\begin{align*}
+		\int_0^\infty\left(\prod_{k=1}^N\overline w^{i_k}(z)\right)\cLh_i^\mu(z)\,dz&=\sum_{\sigma\subseteq\{1,\dots,N\}}\left(\prod_{\ell\notin\sigma}w_\infty^{i_\ell}\right)\int_0^\infty\left(\prod_{\ell\in\sigma}\sum_{j=0}^{p_z}w_j^{i_\ell}\cLh_j^{\mu}(z)\right)\cLh_i^\mu(z)\,dz\\&=\sum_{\sigma\subseteq\{1,\dots,N\}}\left(\prod_{\ell\notin\sigma}w_\infty^{i_\ell}\right)\int_0^\infty e^{-\frac{s+1}{2} \mu z}\left(\prod_{\ell\in\sigma}\sum_{j=0}^{p_z}w_j^{i_\ell} L_j(\mu z)\right)L_i(\mu z)\,dz.
+	\end{align*}
+	With the change of variables $\frac{s+1}{2} \mu z=y$, the integral becomes
+	\begin{equation*}
+		\frac{2}{\mu(s+1)}\int_0^\infty e^{-y}\left(\prod_{\ell\in\sigma}\sum_{j=0}^{p_z}w_j^{i_\ell} L_j\left(\frac{2 y}{s+1}\right)\right)L_i\left(\frac{2 y}{s+1}\right)\,dy.
+	\end{equation*}
+	The quantity multiplying $e^{-y}$ is a polynomial of degree $p_zs+i$ in $y$. Since $i$ is at most $p_z$, Gauss-Laguerre(-Radau) quadrature with $Q_s$ points is exact as long as $2Q_s-1-\delta \geq p_z(s+1)$.
+\end{proof}
+	\begin{remark}
+		This result also allows to compute integrals of the form
+		\begin{equation*}
+			\int_0^\infty\left(\prod_{k=1}^N\overline{w}^{i_k}(z)\right)\cLh_i^{\mu\prime}(z)\,dz.
+		\end{equation*}
+		In fact, using the properties of Laguerre functions, we can write
+		\begin{equation}\label{integral_Lprime}
+			\int_0^\infty\left(\prod_{k=1}^N\overline{w}^{i_k}(z)\right)\cLh_i^{\mu\prime}(z)\,dz = -\frac{\mu}{2}\int_0^\infty\left(\prod_{k=1}^N\overline{w}^{i_k}(z)\right)\cLh_i^{\mu}(z)\,dz-\mu\sum_{j=0}^{i-1}\int_0^\infty\left(\prod_{k=1}^N\overline{w}^{i_k}(z)\right)\cLh_j^\mu(z)\,dz
+		\end{equation}
+		and apply the result of the Proposition to each term on the right-hand side.
+	\end{remark}
+	\begin{remark}
+		In the case of the Euler's equations, most of the integrals in \eqref{a_B_h} can be written as the left-hand side of \eqref{integral_L} or \eqref{integral_Lprime} with $N\leq 4$. This entails that, for any given instance of the coefficients $\wtbf$, Proposition \ref{prop:integral_euler} allows to compute the integrals exactly from the matrices $P^{(s)}$ and the modified weights $\widehat{\omega}^{(s)}$ with $s=0,\dots,4$. The only exception is the integral involving $\bbf$ in the definition of $\htbf$, which requires a separate treatment because the body force $\gbf$ and the reaction coefficient $\gambf$ might explicitly depend on $z$ (more on this later).
+	\end{remark}
+	\begin{remark}
+		In order to apply Proposition \ref{prop:integral_euler}, we need to precompute and store the matrices $P^{(s)}$ and the modified weights $\omega^{(s)}$ for $s=0,\dots,4$. The storage required by the matrices and the weights for large polynomial degree $p_z$ is
+		\begin{equation*}
+			\sum_{s=0}^4(p_z+1)Q_s \approx \frac{p_z^2}{2}\sum_{i=0}^4(i+1) = \frac{15}{2}p_z^2
+		\end{equation*}
+		and
+		\begin{equation*}
+			\sum_{s=0}^4Q_s \approx \frac{p_z}{2}\sum_{i=0}^4(i+1) = \frac{15}{2}p_z,
+		\end{equation*}
+		respectively. By exploiting orthogonality properties of the Laguerre polynomials in the case $s=0$ and $s=1$, one can actually reduce the storage to $6p_z^2$ and $6p_z$, respectively.
+	\end{remark}
+	\begin{remark}
+		The matrices $P^{(s)}$ contain the evaluation of the Laguerre polynomials at suitable quadrature points. Classical discretization schemes only require to store one such matrix. Here, however, the presence of the quantities $w^{i_k}_\infty$ in the product on the left-hand side of \eqref{integral_L} entails that the quantity inside the integral is a combination of exponential with all the scaling factors in the range $\{\mu/2,\mu,\dots,(N+1)\mu/2\}$. Therefore, exact quadrature requires to store $N+1$ matrices, one for each possible scaling.
+	\end{remark}
+	
+	\paragraph{Integration of the source-reaction term}
+	The only integral in \eqref{a_B_h} which is not covered by Proposition \ref{prop:integral_euler} is
+	\begin{equation*}
+		\int_0^\infty\bbf(\wbf(\xbf,z,t),\xbf,z,t)\cLh_j^\mu(z)\,dz,
+	\end{equation*}
+	appearing in the definition of $\hbf$. For general $\bbf$, the only way to compute this integral numerically is by means of Proposition \ref{prop:int_general}. We can improve this in the case of the Euler's equations, where we have
+	\begin{equation*}
+		\bbf(\wbf) = \begin{bmatrix}
+			0 \\ \rho\gbf \\ \rho\ubf\cdot\gbf
+		\end{bmatrix} - \Gamma(M(\wbf)\wbf-M(\wbf_\infty)\wbf_\infty),
+	\end{equation*}
+	where $\Gamma=\Gamma(\xbf,z,t)\in\Rbb^{c\times c}$ is the diagonal matrix with the concatenation of $\gamma_1$, $\boldsymbol{\gamma}_2$ and $\gamma_3$ on the diagonal. In the following we assume that the gravity $\gbf$ is constant, and that the diagonal elements of $\Gamma$ only depend on $z$ and are of the form
+	\begin{equation*}
+		\Gamma_{i,i}(z) = \frac{\Delta\gamma_i}{1+\exp\left(\frac{\alpha_i-z}{\sigma_i}\right)}, \qquad i=1,\dots,c, 
+	\end{equation*}
+	where $\Delta\gamma_i\geq 0$. This corresponds to a sigmoidal damping coefficient associated with the $i$th component. If $\Delta\gamma_i=0$ for some $i$, then the corresponding component is not damped. The parameter $\alpha_i$ controls the location of the damping transition, while $\sigma_i>0$ controls its width. The effect of $\Gamma_{i,i}$ is to relax the associated physical quantity to its far field value. The idea is to use this reaction term to simulate a damping layer. Then we have
+	\begin{equation*}
+		\bbf(\wbf) = \bbf(\wbf(\xbf,z,t),z) = \begin{bmatrix}
+			0 \\ \rho(\xbf,z,t)\gbf \\ \rho(\xbf,z,t)\ubf(\xbf,z,t)\cdot\gbf
+		\end{bmatrix} - \Gamma(z)(M(\wbf(\xbf,z,t))\wbf(\xbf,z,t)-M(\wbf_\infty)\wbf_\infty).
+	\end{equation*}
+	Since $\gbf$ is assumed to be constant, the integral of the first term on the right-hand side against a generic Laguerre function can be integrated exactly using Proposition \ref{prop:integral_euler} with $N$ at most $2$. Moreover, by using the definition of $\wbf$ to expand the second term, we find that one has to compute
+	\begin{equation*}
+		\int_0^\infty \Gamma(z)_{i,i}\cLh_j^\mu(z)\cLh_k^\mu(z)\,dz \qquad \forall j,k=0,\dots,p_z,\quad \forall i \text{ such that } \Delta\gamma_i>0
+	\end{equation*}
+	and
+	\begin{equation*}
+		\int_0^\infty \Gamma(z)_{i,i}\cLh_j^\mu(z)\cLh_k^\mu(z)\cLh_j^\ell(z)\,dz \qquad \forall j,k,\ell=0,\dots,p_z,\quad \forall i=2,\dots,d+1 \text{ such that } \Delta\gamma_i>0.
+	\end{equation*}
+	These can be approximated by suitable Gauss-Laguerre(-Radau) quadrature rules as
+	\begin{equation*}
+		\frac{1}{\mu}\sum_{q=1}^Q\frac{\Delta\gamma_iL_j(z_q)L_k(z_q)}{1+\exp\left(\frac{\mu\alpha_i-z_q}{\mu\sigma_i}\right)}\omega_q \qquad \text{and} \qquad \frac{2}{3\mu}\sum_{q=1}^Q\frac{\Delta\gamma_iL_j(2z_q/3)L_k(2z_q/3)L_\ell(2z_q/3)}{1+\exp\left(\frac{3\mu\alpha_i-2z_q}{3\mu\sigma_i}\right)}\omega_q,
+	\end{equation*}
+	respectively. To approximate these integrals with comparable accuracy, one should use, for example, $Q=\left\lceil\frac{3p_z+1}{2}\right\rceil$ and $Q=2p_z+1$, respectively. If this numerical quadrature is too expensive to be carried out at every evaluation of $\hbf$, one could exploit the fact that the integrals are independent of time, compute them once at the initial time and store the resulting matrices. However, the maximum storage required is $(d+2)(p_z+1)^2+d(p_z+1)^3$. If the same parameters $\alpha_i$ and $\sigma_i$ are employed for all $i$, then the storage reduces to $(p_z+1)^2+(p_z+1)^3$, which might still be too large. Depending on the application, one has to decide whether to compute the integrals at every evaluation or to store the matrices.
+	
+\paragraph{Computation of the initial condition}
+The discussion carried out so far allows to evaluate the maps $\atbf$, $\Btbf$ and $\htbf$ appearing in \eqref{system_reduced}. The only missing information to set up a matrix-free DG scheme in $\Omega_b$ is how to obtain the initial condition $\wtbf_0(\xbf):=\wtbf(\xbf,0)$. Starting from \eqref{initial_cond_reduced}, using the fact that
+\begin{equation*}
+	\int_0^\infty\cLh_k^\mu(z)\,dz = \frac{2}{\mu}(-1)^k, \qquad k=0,\dots,p_z
+\end{equation*}
+and approximating the remaining integral by a suitable quadrature rule, we obtain 
+\begin{equation*}
+	w_k^i(\xbf,0)\approx2\sum_{q=1}^Qw^i\left(\xbf,\frac{2z_q}{\mu},0\right)L_k(2z_q)\omega_q-2(-1)^kw^i_\infty, \qquad i=1,\dots,c, \quad k=0,\dots,p_z.
+\end{equation*}
+We choose $Q=p_z+1$.
+
+With this, one can proceed to the matrix-free DG discretization of \eqref{system_reduced}. At every evaluation of $\atbf$, $\Btbf$ and $\htbf$, an inner loop over the Laguerre degrees of freedom $0,\dots,p_z$ takes care of the numerical evaluation of the integrals in \eqref{a_B_h} as detailed previously.
+	
+	
+	
+	
+	
+	
+	
+	
+\end{document}
